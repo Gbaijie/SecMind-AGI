@@ -16,4 +16,4 @@ django_backend/data/vector_stores/
 .vscode
 
 # nodejs
-vue_frontend/node_nodules/
+vue_frontend/node_modules/

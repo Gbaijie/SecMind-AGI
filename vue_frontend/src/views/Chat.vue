@@ -1,0 +1,927 @@
+<template>
+  <div class="chat-container">
+    <div class="sidebar" v-if="isSidebarOpen">
+      <SessionList
+        :sessions="sessions"
+        :current-session="currentSession"
+        @select="handleSelectSession"
+        @delete="handleDeleteSession"
+        @create="handleCreateSession"
+      />
+      
+      <div class="user-info">
+        <div class="user-actions">
+          <button class="secondary" @click="openSettingsModal">
+            <settings-icon class="icon-small" />
+            设置
+          </button>
+          <button class="secondary" @click="handleClearHistory">
+            <trash-icon class="icon-small" />
+            清空当前会话
+          </button>
+        </div>
+      </div>
+    </div>
+    
+    <div class="chat-area">
+      <div class="chat-header">
+        <button class="icon-button sidebar-toggle" @click="toggleSidebar" title="切换侧边栏">
+          <MenuIcon class="icon" />
+        </button>
+
+        <div class="header-titles">
+          <h2 class="session-title">{{ currentSession }}</h2>
+          <p class="session-subtitle">大模型故障日志诊断</p>
+        </div>
+      </div>
+      
+      <div v-if="error" class="error-message global-error">{{ error }}</div>
+      
+      <div class="messages-container" ref="messagesContainerRef">
+        <div v-if="messages.length === 0" class="empty-state">
+          <div class="logo-icon-wrapper">
+<svg height="5em" style="flex:none;line-height:1" viewBox="0 0 24 24" width="5em" xmlns="http://www.w3.org/2000/svg"><title>DeepSeek</title><path d="M23.748 4.482c-.254-.124-.364.113-.512.234-.051.039-.094.09-.137.136-.372.397-.806.657-1.373.626-.829-.046-1.537.214-2.163.848-.133-.782-.575-1.248-1.247-1.548-.352-.156-.708-.311-.955-.65-.172-.241-.219-.51-.305-.774-.055-.16-.11-.323-.293-.35-.2-.031-.278.136-.356.276-.313.572-.434 1.202-.422 1.84.027 1.436.633 2.58 1.838 3.393.137.093.172.187.129.323-.082.28-.18.552-.266.833-.055.179-.137.217-.329.14a5.526 5.526 0 01-1.736-1.18c-.857-.828-1.631-1.742-2.597-2.458a11.365 11.365 0 00-.689-.471c-.985-.957.13-1.743.388-1.836.27-.098.093-.432-.779-.428-.872.004-1.67.295-2.687.684a3.055 3.055 0 01-.465.137 9.597 9.597 0 00-2.883-.102c-1.885.21-3.39 1.102-4.497 2.623C.082 8.606-.231 10.684.152 12.85c.403 2.284 1.569 4.175 3.36 5.653 1.858 1.533 3.997 2.284 6.438 2.14 1.482-.085 3.133-.284 4.994-1.86.47.234.962.327 1.78.397.63.059 1.236-.03 1.705-.128.735-.156.684-.837.419-.961-2.155-1.004-1.682-.595-2.113-.926 1.096-1.296 2.746-2.642 3.392-7.003.05-.347.007-.565 0-.845-.004-.17.035-.237.23-.256a4.173 4.173 0 001.545-.475c1.396-.763 1.96-2.015 2.093-3.517.02-.23-.004-.467-.247-.588zM11.581 18c-2.089-1.642-3.102-2.183-3.52-2.16-.392.024-.321.471-.235.763.09.288.207.486.371.739.114.167.192.416-.113.603-.673.416-1.842-.14-1.897-.167-1.361-.802-2.5-1.86-3.301-3.307-.774-1.393-1.224-2.887-1.298-4.482-.02-.386.093-.522.477-.592a4.696 4.696 0 011.529-.039c2.132.312 3.946 1.265 5.468 2.774.868.86 1.525 1.887 2.202 2.891.72 1.066 1.494 2.082 2.48 2.914.348.292.625.514.891.677-.802.09-2.14.11-3.054-.614zm1-6.44a.306.306 0 01.415-.287.302.302 0 01.2.288.306.306 0 01-.31.307.303.303 0 01-.304-.308zm3.11 1.596c-.2.081-.399.151-.59.16a1.245 1.245 0 01-.798-.254c-.274-.23-.47-.358-.552-.758a1.73 1.73 0 01.016-.588c.07-.327-.008-.537-.239-.727-.187-.156-.426-.199-.688-.199a.559.559 0 01-.254-.078c-.11-.054-.2-.19-.114-.358.028-.054.16-.186.192-.21.356-.202.767-.136 1.146.016.352.144.618.408 1.001.782.391.451.462.576.685.914.176.265.336.537.445.848.067.195-.019.354-.25.452z" fill="#4D6BFE"></path></svg>
+          </div>
+          <h3>开始您的诊断对话</h3>
+          <p>请在下方输入您的问题或日志信息。</p>
+        </div>
+        
+        <ChatMessage
+          v-for="(msg, index) in messages"
+          :key="msg.id"
+          :is-user="msg.isUser"
+          :content="msg.content"
+          :attachment-name="msg.attachmentName"
+          :think-process="msg.think_process" 
+          :duration="msg.duration"
+          :timestamp="msg.timestamp"
+          :message-id="msg.id"
+          :allow-regenerate="!msg.isUser && index === messages.length - 1 && !loading"
+          @regenerate="handleRegenerate"
+          @edit="handleEditMessage"
+        />
+        
+        <div 
+          v-if="loading && 
+                messages.length > 0 && 
+                !messages[messages.length - 1].isUser && 
+                !messages[messages.length - 1].content && 
+                !messages[messages.length - 1].think_process" 
+          class="loading-indicator"
+        >
+          <div class="loading"></div>
+          <p> 模型正在分析...</p>
+        </div>
+      </div>
+      
+      <div class="chat-input-wrapper">
+        <ChatInput
+          ref="chatInputRef"
+          :loading="loading"
+          @send="handleSendMessage"
+        />
+      </div>
+
+      <div
+        v-if="showSettingsModal"
+        class="settings-modal-overlay"
+        @click.self="closeSettingsModal"
+      >
+        <div class="settings-modal card">
+          <div class="settings-modal-header">
+            <h3>设置</h3>
+            <button class="icon-button" @click="closeSettingsModal" title="关闭">
+              <x-icon class="icon-small" />
+            </button>
+          </div>
+
+          <div class="settings-modal-body">
+            <div class="settings-field">
+              <label for="sessionSelect">选择会话</label>
+              <select id="sessionSelect" v-model="selectedSessionForExport">
+                <option
+                  v-for="session in sessions"
+                  :key="session"
+                  :value="session"
+                >
+                  {{ session }}
+                </option>
+              </select>
+            </div>
+
+            <div class="settings-field">
+              <label for="modelSelect">选择模型</label>
+              <select id="modelSelect" v-model="selectedModel">
+                <option v-for="model in availableModels" :key="model" :value="model">
+                  {{ model }}
+                </option>
+              </select>
+            </div>
+
+            <div class="settings-actions">
+              <button
+                class="secondary"
+                :disabled="isExporting"
+                @click="handleExportSelectedSession"
+              >
+                <download-icon class="icon-small" />
+                {{ isExporting ? '导出中...' : '导出为HTML文件' }}
+              </button>
+              <button class="secondary danger-hover" @click="handleLogoutFromModal">
+                <logout-icon class="icon-small" />
+                退出登录
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup>
+// (新增) 导入图标
+import { onMounted, computed, ref, nextTick, watch } from 'vue'; 
+import { useRouter } from 'vue-router';
+import { useStore } from '../store';
+import api from '../api';
+import SessionList from '../components/SessionList.vue';
+import ChatMessage from '../components/ChatMessage.vue';
+import ChatInput from '../components/ChatInput.vue';
+// (修改) 导入 MenuIcon
+import { DownloadIcon, TrashIcon, LogoutIcon, MenuIcon, SettingsIcon, XIcon } from 'vue-tabler-icons';
+const store = useStore();
+const router = useRouter();
+const messagesContainerRef = ref(null); 
+const chatInputRef = ref(null); 
+const lastUserMessage = ref(''); 
+
+// (新增) 侧边栏状态
+const isSidebarOpen = ref(true);
+
+// ... (计算属性)
+const sessions = computed(() => store.sessions);
+const currentSession = computed(() => store.currentSession);
+const messages = computed(() => store.messages[currentSession.value] || []);
+const loading = computed(() => store.loading);
+const error = computed(() => store.error);
+const isEditing = computed(() => store.isEditing);
+const editingMessageId = computed(() => store.editingMessageId);
+const useDbSearch = computed(() => store.useDbSearch);
+const useWebSearch = computed(() => store.useWebSearch);
+
+const showSettingsModal = ref(false);
+const isExporting = ref(false);
+const selectedSessionForExport = ref(currentSession.value);
+const selectedModel = ref('DeepSeek-R1');
+const availableModels = ref([
+  'DeepSeek-R1:7b',
+  'Qwen3:8b',
+  'Llama3:8b'
+]);
+
+watch(() => currentSession.value, (newSession) => {
+  if (!showSettingsModal.value) {
+    selectedSessionForExport.value = newSession;
+  }
+}, { immediate: true });
+
+watch(sessions, (newSessions) => {
+  if (!newSessions.includes(selectedSessionForExport.value)) {
+    selectedSessionForExport.value = newSessions[0] || '';
+  }
+}, { immediate: true });
+
+const openSettingsModal = () => {
+  selectedSessionForExport.value = currentSession.value;
+  showSettingsModal.value = true;
+};
+
+const closeSettingsModal = () => {
+  showSettingsModal.value = false;
+};
+
+const ensureSessionMessages = async (sessionId) => {
+  let sessionMessages = store.messages[sessionId];
+  if (sessionMessages && sessionMessages.length > 0) {
+    return sessionMessages;
+  }
+
+  try {
+    const response = await api.getHistory(sessionId);
+    store.loadHistory(sessionId, response.data.history);
+    sessionMessages = store.messages[sessionId] || [];
+    return sessionMessages;
+  } catch (err) {
+    const message = err?.response?.data?.error || err?.message || '加载会话历史失败';
+    throw new Error(message);
+  }
+};
+
+const buildExportHtml = (sessionName, exportTime, sessionMessages) => {
+  let htmlContent = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <title> 模型聊天记录 - ${sessionName}</title>
+        <style>
+            body {
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+                line-height: 1.6;
+                color: #333;
+                max-width: 800px;
+                margin: 0 auto;
+                padding: 20px;
+                font-size: 14px;
+            }
+            .header {
+                text-align: center;
+                border-bottom: 2px solid #1a73e8;
+                padding-bottom: 20px;
+                margin-bottom: 30px;
+            }
+            .header h1 {
+                color: #1a73e8;
+                margin-bottom: 10px;
+                font-size: 24px;
+            }
+            .header h2 {
+                color: #5f6368;
+                margin: 0 0 5px 0;
+                font-weight: normal;
+                font-size: 18px;
+            }
+            .header p {
+                color: #80868b;
+                margin: 0;
+                font-size: 14px;
+            }
+            .message {
+                margin-bottom: 20px;
+                padding: 12px;
+                border-radius: 6px;
+            }
+            .user-message {
+                background-color: #e8f0fe;
+                border-left: 3px solid #1a73e8;
+            }
+            .ai-message {
+                background-color: #f1f8e9;
+                border-left: 3px solid #34a853;
+            }
+            .message-header {
+                font-weight: bold;
+                margin-bottom: 8px;
+                font-size: 15px;
+            }
+            .user-header {
+                color: #1a73e8;
+            }
+            .ai-header {
+                color: #34a853;
+            }
+            .timestamp {
+                color: #80868b;
+                font-size: 12px;
+            }
+            .content {
+                white-space: pre-wrap;
+                font-size: 14px;
+                line-height: 1.5;
+            }
+            @media print {
+                body {
+                    padding: 10px;
+                }
+                .message {
+                    page-break-inside: avoid;
+                    margin-bottom: 15px;
+                }
+            }
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <h1> 模型聊天记录 </h1>
+            <h2>会话: ${sessionName}</h2>
+            <p>导出时间: ${exportTime}</p>
+        </div>
+  `;
+
+  sessionMessages.forEach((msg) => {
+    const role = msg.isUser ? '用户' : 'AI助手';
+    const time = msg.timestamp ? new Date(msg.timestamp).toLocaleString('zh-CN') : '';
+    const contentText = msg.content || '';
+
+    htmlContent += `
+        <div class="message ${msg.isUser ? 'user-message' : 'ai-message'}">
+            <div class="message-header ${msg.isUser ? 'user-header' : 'ai-header'}">
+                ${role}${time ? ` <span class="timestamp">(${time})</span>` : ''}
+            </div>
+            <div class="content">${contentText}</div>
+        </div>
+    `;
+  });
+
+  htmlContent += `
+    </body>
+    </html>
+  `;
+
+  return htmlContent;
+};
+
+const exportSessionToHtml = async (sessionId) => {
+  const sessionName = sessionId;
+  const exportTime = new Date().toLocaleString('zh-CN');
+  const sessionMessages = await ensureSessionMessages(sessionId);
+  const htmlContent = buildExportHtml(sessionName, exportTime, sessionMessages);
+
+  const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${sessionName}_聊天记录_${new Date().getTime()}.html`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+};
+
+const handleExportSelectedSession = async () => {
+  if (isExporting.value || !selectedSessionForExport.value) {
+    return;
+  }
+
+  isExporting.value = true;
+  try {
+    await exportSessionToHtml(selectedSessionForExport.value);
+    alert('聊天记录已导出为HTML文件，您可以使用浏览器打开该文件并打印为PDF');
+  } catch (error) {
+    console.error('导出失败:', error);
+    alert(error.message || '导出失败，请查看控制台了解详细信息');
+  } finally {
+    isExporting.value = false;
+  }
+};
+
+const loadGlossary = async () => {
+  try {
+    const response = await api.getGlossary();
+    store.setGlossary(response.data.terms || {});
+  } catch (err) {
+    console.warn('加载术语词典失败', err);
+  }
+};
+
+// (新增) 切换侧边栏函数
+const toggleSidebar = () => {
+  isSidebarOpen.value = !isSidebarOpen.value;
+};
+
+const scrollToBottom = async () => {
+  await nextTick();
+  const container = messagesContainerRef.value;
+  if (container) {
+    container.scrollTop = container.scrollHeight;
+  }
+};
+
+const loadHistory = async (sessionId) => {
+  try {
+    store.setLoading(true);
+    const response = await api.getHistory(sessionId);
+    store.loadHistory(sessionId, response.data.history);
+
+    const currentMessages = store.messages[sessionId] || [];
+    const lastUserMsg = [...currentMessages].reverse().find(m => m.isUser);
+    lastUserMessage.value = lastUserMsg ? lastUserMsg.content : '';
+
+    await scrollToBottom(); 
+  } catch (err) {
+    store.setError(err.response?.data?.error || '加载历史记录失败');
+  } finally {
+    store.setLoading(false);
+  }
+};
+
+onMounted(() => {
+  loadGlossary();
+  loadHistory(currentSession.value);
+});
+
+const handleSelectSession = async (sessionId) => {
+  store.setCurrentSession(sessionId);
+  await loadHistory(sessionId);
+};
+
+const handleDeleteSession = async (sessionId) => {
+  try {
+    if (store.sessions.length === 1 && store.sessions[0] === sessionId) {
+        store.addSession('默认对话');
+    }
+    await api.clearHistory(sessionId);
+    store.removeSession(sessionId);
+    store.clearSessionMessages(sessionId);
+    await loadHistory(store.currentSession);
+  } catch (err) {
+    store.setError(err.response?.data?.error || '删除会话失败');
+  }
+};
+
+const handleCreateSession = (sessionId) => {
+  store.addSession(sessionId);
+  store.clearSessionMessages(sessionId);
+  loadHistory(sessionId);
+};
+
+const handleSendMessage = async (content, extra) => {
+  const sessionId = currentSession.value;
+
+  if (isEditing.value && editingMessageId.value) {
+    await handleEditSend(sessionId, content);
+  } else {
+    await handleNormalSend(sessionId, content, extra);
+  }
+};
+
+const handleNormalSend = async (sessionId, content, extra) => {
+  lastUserMessage.value = content;
+  store.addMessage(sessionId, true, { content: content, attachmentName: extra && extra.attachmentName ? extra.attachmentName : undefined });
+  await scrollToBottom(); 
+  
+  const aiMessageId = store.addMessage(sessionId, false, { 
+    content: '', 
+    think_process: '' 
+  });
+  await scrollToBottom(); 
+  
+  store.setLoading(true);
+  store.setError(null);
+
+  // 将附件作为附加段落拼接到本次用户输入末尾（不影响输入框展示）
+  const combinedInput = extra && extra.attachmentText
+    ? `${content}\n\n[附件]\n${extra.attachmentText}`
+    : content;
+
+  await api.streamChat(
+    sessionId,
+    combinedInput,
+    (data) => {
+      if (data.type === 'content') {
+        store.updateLastMessage(sessionId, { content_chunk: data.chunk });
+      } else if (data.type === 'think') {
+        store.updateLastMessage(sessionId, { think_chunk: data.chunk });
+      } else if (data.type === 'metadata') {
+        store.updateLastMessage(sessionId, { duration: data.duration });
+      } else if (data.type === 'error') {
+        store.setError(data.chunk || '流式响应出错');
+      }
+      scrollToBottom();
+    },
+    (errorMessage) => {
+      store.setLoading(false);
+      store.setError(errorMessage);
+      scrollToBottom();
+    },
+    () => {
+      store.setLoading(false);
+      scrollToBottom();
+    },
+    null, 
+    useDbSearch.value,
+    useWebSearch.value
+  );
+};
+
+const handleEditSend = async (sessionId, editedContent) => {
+  const messageId = editingMessageId.value;
+  const chatHistory = messages.value;
+
+  lastUserMessage.value = editedContent;
+  
+  const editIndex = chatHistory.findIndex(msg => msg.id === messageId);
+  
+  if (editIndex === -1) {
+    store.setError('找不到要编辑的消息');
+    store.clearEditing();
+    return;
+  }
+
+  const context = chatHistory.slice(0, editIndex).map(msg => ({
+    role: msg.isUser ? 'user' : 'assistant',
+    content: msg.content
+  }));
+
+  chatHistory[editIndex].content = editedContent;
+
+  let aiMessageIndex = editIndex + 1;
+  
+  if (aiMessageIndex >= chatHistory.length) {
+    store.addMessage(sessionId, false, { 
+      content: '', 
+      think_process: '' 
+    });
+    aiMessageIndex = editIndex + 1;
+  } else if (chatHistory[aiMessageIndex].isUser) {
+    chatHistory.splice(aiMessageIndex, 0, {
+      id: Date.now() + Math.random(),
+      isUser: false,
+      content: '',
+      think_process: '',
+      duration: null,
+      timestamp: new Date()
+    });
+    aiMessageIndex = editIndex + 1;
+  } else {
+    chatHistory[aiMessageIndex].content = '';
+    chatHistory[aiMessageIndex].think_process = '';
+    chatHistory[aiMessageIndex].duration = null;
+  }
+
+  if (editIndex + 2 < chatHistory.length) {
+    chatHistory.splice(editIndex + 2);
+  }
+
+  await scrollToBottom();
+  store.setLoading(true);
+  store.setError(null);
+
+  await api.streamChat(
+    sessionId,
+    editedContent,
+    (data) => {
+      if (data.type === 'content') {
+        store.updateMessageAtIndex(sessionId, aiMessageIndex, { content_chunk: data.chunk });
+      } else if (data.type === 'think') {
+        store.updateMessageAtIndex(sessionId, aiMessageIndex, { think_chunk: data.chunk });
+      } else if (data.type === 'metadata') {
+        store.updateMessageAtIndex(sessionId, aiMessageIndex, { duration: data.duration });
+      } else if (data.type === 'error') {
+        store.setError(data.chunk || '流式响应出错');
+      }
+      scrollToBottom();
+    },
+    (errorMessage) => {
+      store.setLoading(false);
+      store.setError(errorMessage);
+      store.clearEditing();
+      scrollToBottom();
+    },
+    () => {
+      store.setLoading(false);
+      store.clearEditing();
+      if (chatInputRef.value) {
+        chatInputRef.value.clearInput();
+      }
+      scrollToBottom();
+    },
+    context,
+    useDbSearch.value,
+    useWebSearch.value
+  );
+};
+
+const handleRegenerate = async () => {
+  if (loading.value || !lastUserMessage.value) {
+    console.warn('Cannot regenerate while loading or no last user message.');
+    return;
+  }
+  const sessionId = currentSession.value;
+  
+  const currentMessages = messages.value;
+  if (currentMessages.length === 0 || currentMessages[currentMessages.length - 1].isUser) {
+      console.warn('Last message is not an AI message.');
+      return;
+  }
+
+  store.removeLastMessage(sessionId);
+  await scrollToBottom(); 
+  
+  await handleNormalSend(sessionId, lastUserMessage.value);
+};
+
+const handleEditMessage = (editData) => {
+  const { messageId, content } = editData;
+  store.setEditing(messageId);
+  
+  if (chatInputRef.value) {
+    chatInputRef.value.setContent(content);
+  }
+  
+  scrollToBottom();
+  nextTick(() => {
+    if (chatInputRef.value) {
+      chatInputRef.value.focus();
+    }
+  });
+};
+
+// (修改) 替换 confirm
+const handleClearHistory = async () => {
+  if (window.confirm(`确定要清空当前会话 "${currentSession.value}" 的历史记录吗？`)) {
+    try {
+      await api.clearHistory(currentSession.value);
+      store.clearSessionMessages(currentSession.value);
+      await scrollToBottom();
+    } catch (err)
+ {
+      store.setError(err.response?.data?.error || '清空历史记录失败');
+    }
+  }
+};
+
+// (修改) 替换 confirm
+const handleLogout = () => {
+  if (window.confirm('确定要退出登录吗？')) {
+    store.clearApiKey();
+    router.push('/login');
+    return true;
+  }
+  return false;
+};
+
+const handleLogoutFromModal = () => {
+  const didLogout = handleLogout();
+  if (didLogout) {
+    closeSettingsModal();
+  }
+};
+</script>
+
+<style scoped>
+.chat-container {
+  display: flex;
+  height: 100vh;
+  overflow: hidden; /* (新增) 防止溢出 */
+}
+
+.sidebar {
+  width: 280px; /* (调整) 宽度 */
+  flex-shrink: 0; /* (新增) 防止侧边栏被压缩 */
+  display: flex;
+  flex-direction: column;
+  background-color: var(--card-bg);
+  border-right: 1px solid var(--border-color);
+}
+
+.user-info {
+  padding: 1rem;
+  border-top: 1px solid var(--border-color);
+}
+
+.user-actions {
+  display: flex;
+  flex-direction: column; /* (调整) 垂直排列 */
+  gap: 0.5rem;
+}
+
+.user-actions button {
+  width: 100%;
+  justify-content: flex-start; /* (新增) 按钮内容左对齐 */
+  font-size: 0.875rem;
+}
+
+/* (新增) 退出登录按钮的悬停效果 */
+.danger-hover:hover {
+  background-color: #fee2e2;
+  border-color: #fca5a5;
+  color: var(--danger-color);
+}
+
+.icon-button {
+  background: none;
+  border: none;
+  padding: 0.5rem; /* 增加内边距，更易点击且视觉更舒展 */
+  border-radius: 0.75rem; /* 增加圆角，更柔和，可调整 */
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); /* 使用更平滑的三次贝塞尔曲线过渡 */
+  flex-shrink: 0;
+}
+
+.icon-button:hover {
+  /* 悬停反馈更现代 */
+  background-color: var(--bg-hover-subtle, rgba(0, 0, 0, 0.04)); /* 使用更微妙的颜色，例如透明度 */
+  color: var(--text-primary); 
+  
+  /* 轻微的抬升效果，增加立体感 */
+  transform: translateY(-1px); 
+}
+
+.icon-button:active {
+  background-color: var(--bg-hover);
+  border: 1px solid var(--border-color);
+  transform: scale(0.95);
+}
+
+.icon-button:focus {
+  outline: none;
+  border: none;
+}
+
+.icon {
+  width: 2rem;
+  height: 2rem;
+  display: block;
+}
+
+.icon-small {
+  width: 1rem;
+  height: 1rem;
+}
+
+.chat-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bg-color);
+  overflow: hidden; 
+}
+
+.chat-header {
+  display: flex; /* (新增) 使用 flex 布局 */
+  align-items: center; /* (新增) 垂直居中 */
+  padding: 1rem 1.5rem; /* (调整) 增加 padding */
+  background-color: var(--card-bg);
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+/* (新增) 侧边栏切换按钮 */
+.sidebar-toggle {
+  margin-right: 2rem; /* (新增) 与标题的间距 */
+}
+
+/* (新增) 标题包裹层 */
+.header-titles {
+  flex-grow: 1; /* 占据剩余空间 */
+  min-width: 0; /* 允许标题收缩和截断 */
+}
+
+.session-title {
+  font-size: 1.25rem; /* (调整) */
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+  /* (新增) 防止标题过长时溢出 */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.session-subtitle {
+  font-size: 0.875rem; /* (调整) */
+  color: var(--text-secondary);
+  font-weight: 500;
+  margin: 0;
+}
+
+/* (新增) 全局错误提示定位 */
+.global-error {
+  margin: 1rem 1.5rem 0;
+  box-shadow: var(--shadow);
+}
+
+.messages-container {
+  flex: 1;
+  /* 调整消息框上下、左右移动 */
+  padding: 5rem 12rem;  
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  /* 注意：这里不添加 align-items: center */
+  gap: 1.5rem; 
+}
+
+/* (调整) 空状态样式 */
+.empty-state {
+  margin: auto;
+  color: var(--text-secondary);
+  font-size: 1rem;
+  text-align: center;
+  padding: 2rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.logo-icon-wrapper {
+  border-radius: 50%;
+  padding: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.logo-icon {
+  width: 32px;
+  height: 32px;
+  color: var(--primary-color);
+}
+
+.empty-state h3 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.loading-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem; /* (调整) */
+  padding: 0.5rem 1rem;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  max-width: 80%;
+  align-self: flex-start;
+}
+
+.loading-indicator .loading {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.settings-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1200;
+  padding: 1.5rem;
+}
+
+.settings-modal {
+  width: min(480px, 100%);
+  display: flex;
+  flex-direction: column;
+  max-height: 85vh;
+}
+
+.settings-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.settings-modal-header h3 {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.settings-modal-body {
+  padding: 1rem 1.25rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.settings-field label {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.settings-field select {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  background-color: var(--bg-color);
+  color: var(--text-primary);
+  font-size: 0.95rem;
+}
+
+.settings-field select:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(77, 107, 254, 0.15);
+}
+
+.settings-hint {
+  font-size: 0.75rem;
+  color: var(--text-light);
+}
+
+.settings-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+</style>

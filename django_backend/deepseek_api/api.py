@@ -7,6 +7,7 @@ from django.conf import settings
 from .schemas import LoginIn, LoginOut, ChatIn, ChatOut, HistoryOut, ErrorResponse
 from .models import APIKey
 from .services import get_or_create_session, model_api_call
+from .dashboard_stats import build_dashboard_stats
 from datetime import datetime
 import logging
 import re
@@ -471,7 +472,11 @@ def get_glossary(request):
     return {"terms": GLOSSARY_ENTRIES}
 
 
-api.add_router("", router)
+@router.get("/dashboard/stats", response={200: dict})
+def get_dashboard_stats(request):
+    """聚合 data/log 下真实 CSV 日志，返回大屏图表与拓扑数据。"""
+    return build_dashboard_stats()
+
 
 
 # 新增：文件上传解析接口
@@ -525,3 +530,6 @@ def upload_file(request, file: NinjaUploadedFile = File(...)):
     except Exception as e:
         logger.error(f"文件解析失败: {e}")
         return 400, {"error": f"文件解析失败: {e}"}
+
+
+api.add_router("", router)

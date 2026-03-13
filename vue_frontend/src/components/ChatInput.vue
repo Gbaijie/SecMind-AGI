@@ -1,413 +1,479 @@
 <template>
-  <div class="chat-input-area">
-    <!-- (调整) 搜索选项开关样式 -->
-    <div class="chat-options">
-      <div class="options-left">
-        <label class="option-label" for="db-search-toggle" title="查询本地知识库">
-          <input
-            type="checkbox"
-            id="db-search-toggle"
-            class="custom-checkbox"
-            v-model="useDbSearch"
-          />
-          <span class="checkbox-icon">
-            <database-icon class="icon-small" />
+  <div class="terminal-input-shell" :class="{ 'terminal-input-shell--focused': isFocused }">
+    <div class="terminal-controls">
+      <div class="toggle-group">
+        <label class="toggle-item" title="查询本地知识库">
+          <input type="checkbox" v-model="useDbSearch" />
+          <span class="toggle-core">
+            <DatabaseIcon class="toggle-icon" /> DB SEARCH
           </span>
-          <span>数据库查询</span>
         </label>
-        <label class="option-label" for="web-search-toggle" title="使用互联网搜索">
-          <input
-            type="checkbox"
-            id="web-search-toggle"
-            class="custom-checkbox"
-            v-model="useWebSearch"
-          />
-          <span class="checkbox-icon">
-            <world-icon class="icon-small" />
+
+        <label class="toggle-item" title="使用互联网搜索">
+          <input type="checkbox" v-model="useWebSearch" />
+          <span class="toggle-core">
+            <WorldIcon class="toggle-icon" /> WEB SEARCH
           </span>
-          <span>联网搜索</span>
         </label>
-        <div v-if="attachmentText" class="attachment-chip" title="此文件内容将作为本次消息附件发送">
-          <paperclip-icon class="icon-small" />
-          <span>已添加{{ attachmentName }}</span>
-          <button class="chip-close" @click="removeAttachment" :disabled="loading" aria-label="移除附件">×</button>
-        </div>
+      </div>
+
+      <div v-if="attachmentText" class="attachment-chip" title="附件将随本次消息发送">
+        <PaperclipIcon class="toggle-icon" />
+        <span class="attachment-name">{{ attachmentName }}</span>
+        <button class="chip-close" @click="removeAttachment" :disabled="loading" aria-label="移除附件">x</button>
       </div>
     </div>
 
-    <!-- (调整) 输入框和按钮的包装器 -->
-    <div class="input-wrapper" :class="{ 'focused': isFocused }">
-      <!-- 新增：上传文件按钮（触发隐藏文件选择） -->
+    <div class="input-stage">
       <input
         ref="fileInputRef"
         type="file"
         accept=".txt,.docx,.xlsx"
-        style="display:none"
+        style="display: none"
         @change="onFileChange"
       />
-      <button
-        class="send-button"
-        style="background-color: var(--bg-color); color: var(--text-color);"
-        @click="triggerFileSelect"
-        :disabled="loading"
-        title="上传并读取文件"
-      >
-        <paperclip-icon class="icon" />
+
+      <button class="stage-btn" @click="triggerFileSelect" :disabled="loading" title="上传文件">
+        <PaperclipIcon class="stage-icon" />
       </button>
+
+      <div class="prompt-col">
+        <span class="prompt-label">root@DeepSOC:~$</span>
+      </div>
+
       <textarea
         ref="textareaRef"
         v-model="message"
-        class="chat-input"
-        placeholder="输入您的问题或日志信息"
+        class="terminal-textarea"
+        placeholder="输入诊断命令、日志片段或排障请求..."
         @keyup.enter.exact.prevent="sendMessage"
         @keyup.enter.shift.exact="addNewline"
-        @input="autoResize"
-        @focus="isFocused = true"
-        @blur="isFocused = false"
+        @input="onInput"
+        @focus="setFocusState(true)"
+        @blur="setFocusState(false)"
         :disabled="loading"
         rows="1"
       ></textarea>
-      
-      <!-- (调整) 发送按钮 -->
-      <button 
-        class="send-button" 
+
+      <button
+        class="stage-btn stage-btn--send"
         @click="sendMessage"
         :disabled="!message.trim() || loading"
-        title="发送消息"
+        title="发送"
       >
-        <span v-if="loading" class="loading"></span>
-        <send-icon v-else class="icon" />
+        <span v-if="loading" class="loading-dot"></span>
+        <SendIcon v-else class="stage-icon" />
       </button>
+    </div>
+
+    <div class="wave-lane" aria-hidden="true">
+      <span
+        v-for="(bar, index) in waveBars"
+        :key="`wave-${index}`"
+        class="wave-bar"
+        :style="bar"
+      ></span>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, defineProps, defineEmits, defineExpose, nextTick, computed } from 'vue';
-import { useStore } from '../store';
-// (新增) 导入图标
-import { SendIcon, DatabaseIcon, WorldIcon, PaperclipIcon } from 'vue-tabler-icons';
-import apiDefault, { uploadFile as uploadFileApi } from '../api';
+import { computed, defineEmits, defineExpose, defineProps, nextTick, onMounted, onUnmounted, ref } from 'vue'
+import { useStore } from '../store'
+import { DatabaseIcon, PaperclipIcon, SendIcon, WorldIcon } from 'vue-tabler-icons'
+import { uploadFile as uploadFileApi } from '../api'
 
 const props = defineProps({
   loading: {
     type: Boolean,
-    default: false
-  }
-});
+    default: false,
+  },
+})
 
-const emits = defineEmits(['send']);
+const emit = defineEmits(['send'])
 
-const message = ref('');
-const textareaRef = ref(null);
-const isFocused = ref(false); // (新增) 跟踪聚焦状态
-const fileInputRef = ref(null);
-const attachmentText = ref('');
-const attachmentName = ref('');
-
-const store = useStore();
+const store = useStore()
+const message = ref('')
+const textareaRef = ref(null)
+const fileInputRef = ref(null)
+const isFocused = ref(false)
+const attachmentText = ref('')
+const attachmentName = ref('')
+const wavePhase = ref(0)
+let waveTimer = null
 
 const useDbSearch = computed({
   get: () => store.useDbSearch,
-  set: (value) => store.setUseDbSearch(value)
-});
+  set: (value) => store.setUseDbSearch(value),
+})
 
 const useWebSearch = computed({
   get: () => store.useWebSearch,
-  set: (value) => store.setUseWebSearch(value)
-});
+  set: (value) => store.setUseWebSearch(value),
+})
 
-// (新增) 文本域自动调整高度
+const waveBars = computed(() => {
+  const base = Math.min(message.value.length, 60)
+  return Array.from({ length: 32 }, (_, index) => {
+    const rhythm = Math.sin((index + wavePhase.value) * 0.5)
+    const energy = Math.max(0.08, (rhythm + 1) / 2)
+    const amplitude = 6 + (base * 0.12) + energy * 13
+    const hue = 185 + (index % 7)
+    return {
+      height: `${Math.max(5, Math.min(amplitude, 22))}px`,
+      background: `hsla(${hue}, 100%, 62%, ${0.25 + energy * 0.7})`,
+      boxShadow: `0 0 10px hsla(${hue}, 100%, 62%, 0.5)`,
+      animationDelay: `${index * 20}ms`,
+    }
+  })
+})
+
+const tickWave = () => {
+  wavePhase.value += isFocused.value || message.value ? 1 : 0.2
+}
+
+onMounted(() => {
+  waveTimer = setInterval(tickWave, 80)
+  autoResize()
+})
+
+onUnmounted(() => {
+  if (waveTimer) clearInterval(waveTimer)
+})
+
+const setFocusState = (value) => {
+  isFocused.value = value
+}
+
 const autoResize = () => {
-  if (textareaRef.value) {
-    textareaRef.value.style.height = 'auto';
-    textareaRef.value.style.height = `${textareaRef.value.scrollHeight}px`;
-  }
-};
+  const el = textareaRef.value
+  if (!el) return
+  el.style.height = 'auto'
+  el.style.height = `${Math.min(el.scrollHeight, 220)}px`
+}
+
+const onInput = () => {
+  autoResize()
+}
+
+const sendMessage = () => {
+  const content = message.value.trim()
+  if (!content || props.loading) return
+
+  emit('send', content, {
+    attachmentText: attachmentText.value,
+    attachmentName: attachmentName.value,
+  })
+
+  message.value = ''
+  attachmentText.value = ''
+  attachmentName.value = ''
+  nextTick(autoResize)
+}
+
+const addNewline = (event) => {
+  event.preventDefault()
+  const el = textareaRef.value
+  if (!el) return
+
+  const start = el.selectionStart
+  const end = el.selectionEnd
+
+  message.value = `${message.value.slice(0, start)}\n${message.value.slice(end)}`
+
+  nextTick(() => {
+    el.selectionStart = start + 1
+    el.selectionEnd = start + 1
+    autoResize()
+  })
+}
 
 const setContent = (content) => {
-  message.value = content || '';
-  nextTick(autoResize);
-};
+  message.value = content || ''
+  nextTick(autoResize)
+}
+
+const clearInput = () => {
+  message.value = ''
+  nextTick(autoResize)
+}
 
 const focus = () => {
   nextTick(() => {
-    if (textareaRef.value) {
-      textareaRef.value.focus();
-      textareaRef.value.setSelectionRange(
-        textareaRef.value.value.length, 
-        textareaRef.value.value.length
-      );
-    }
-  });
-};
+    const el = textareaRef.value
+    if (!el) return
+    el.focus()
+    const end = el.value.length
+    el.setSelectionRange(end, end)
+  })
+}
 
-const sendMessage = () => {
-  const content = message.value.trim();
-  if (content && !props.loading) { // (新增) 检查 loading
-    emits('send', content, { attachmentText: attachmentText.value, attachmentName: attachmentName.value });
-    message.value = '';
-    attachmentText.value = '';
-    attachmentName.value = '';
-    nextTick(autoResize); // (新增) 发送后重置高度
-  }
-};
-
-const clearInput = () => {
-  message.value = '';
-  nextTick(autoResize); // (新增) 清除后重置高度
-};
-
-const addNewline = (e) => {
-  // (修改) 确保 addNewline 正常工作
-  e.preventDefault();
-  const el = textareaRef.value;
-  if (!el) return;
-
-  const start = el.selectionStart;
-  const end = el.selectionEnd;
-  
-  // 插入换行符
-  message.value = message.value.substring(0, start) + '\n' + message.value.substring(end);
-  
-  // 移动光标
-  nextTick(() => {
-    el.selectionStart = el.selectionEnd = start + 1;
-    autoResize(); // (新增) 换行时调整高度
-  });
-};
-
-// 新增：触发文件选择
 const triggerFileSelect = () => {
-  if (fileInputRef.value) fileInputRef.value.click();
-};
+  if (!fileInputRef.value || props.loading) return
+  fileInputRef.value.click()
+}
 
-// 新增：处理文件选择并上传解析
-const onFileChange = async (e) => {
-  const files = e.target.files;
-  if (!files || !files[0]) return;
-  const file = files[0];
-  try {
-    const res = await uploadFileApi(file);
-    attachmentText.value = res.text || '';
-    attachmentName.value = file.name || '附件文本';
-  } catch (err) {
-    // 简单提示方式：将错误写入输入框开头，方便用户看到
-    setContent(`【文件读取失败】${err.message || ''}`);
-  } finally {
-    e.target.value = '';
-  }
-};
+const onFileChange = (event) => {
+  const files = event.target.files
+  if (!files || !files[0]) return
 
-// 新增：移除附件
+  const file = files[0]
+  uploadFileApi(file)
+    .then((res) => {
+      attachmentText.value = res.text || ''
+      attachmentName.value = file.name || '附件文本'
+    })
+    .catch((err) => {
+      setContent(`【文件读取失败】${err?.message || ''}`)
+    })
+    .finally(() => {
+      event.target.value = ''
+    })
+}
+
 const removeAttachment = () => {
-  attachmentText.value = '';
-  attachmentName.value = '';
-};
+  attachmentText.value = ''
+  attachmentName.value = ''
+}
 
 defineExpose({
   setContent,
+  clearInput,
   focus,
-  clearInput
-});
+})
 </script>
 
 <style scoped>
-.chat-input-area {
-  max-width: 100%; /* 确保它能铺满父容器 */
-  width: 100%; 
-  margin: 0; 
-  
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem; 
-  
-  /* **修改：左右 padding 设为 3rem，与 messages-container 对齐** */
-  padding: 1rem 3rem; 
-  padding-bottom: 1.5rem; /* 修正底部留白 */
-  
-  border-top: 1px solid var(--border-color);
-  background-color: var(--card-bg); 
-  flex-shrink: 0;
+.terminal-input-shell {
+  position: relative;
+  border: 1px solid var(--border-dim);
+  background: rgba(2, 8, 22, 0.75);
+  padding: 0.55rem 0.75rem 0.72rem;
+  clip-path: polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px);
+  box-shadow: inset 0 0 22px rgba(0, 229, 255, 0.05);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
-/* (调整) 选项样式 */
-.chat-options {
+.terminal-input-shell--focused {
+  border-color: rgba(0, 229, 255, 0.55);
+  box-shadow: inset 0 0 26px rgba(0, 229, 255, 0.09), 0 0 12px rgba(0, 229, 255, 0.12);
+}
+
+.terminal-controls {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem 1rem;
   align-items: center;
   justify-content: space-between;
-}
-
-.options-left {
-  display: inline-flex;
-  align-items: center;
-  gap: 1rem;
+  gap: 0.65rem;
+  margin-bottom: 0.55rem;
   flex-wrap: wrap;
 }
 
-.options-right {
+.toggle-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.toggle-item {
+  position: relative;
   display: inline-flex;
   align-items: center;
 }
 
-.option-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.875rem;
-  color: var(--text-secondary);
+.toggle-item input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
   cursor: pointer;
-  padding: 0.25rem 0.5rem;
-  border-radius: var(--radius);
-  transition: all 0.2s ease;
-  user-select: none;
-  min-height: 2rem;
 }
 
-.option-label:hover {
-  background-color: var(--bg-color);
-}
-
-.option-label .icon-small {
-  width: 1rem;
-  height: 1rem;
-  color: var(--text-light);
-  transition: color 0.2s ease;
-}
-
-/* (新增) 隐藏默认 checkbox */
-.custom-checkbox {
-  display: none;
-}
-
-/* (新增) 自定义 checkbox 图标/状态 */
-.checkbox-icon {
-  display: flex;
+.toggle-core {
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 1rem;
-  height: 1rem;
+  gap: 0.28rem;
+  padding: 0.22rem 0.5rem;
+  border: 1px solid var(--border-dim);
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  transition: all 0.15s ease;
 }
 
-/* (新增) 选中状态 */
-.custom-checkbox:checked + .checkbox-icon .icon-small {
-  color: var(--primary-color);
-}
-.custom-checkbox:checked ~ span {
-  color: var(--primary-color);
-  font-weight: 500;
+.toggle-item input:checked + .toggle-core {
+  border-color: rgba(0, 229, 255, 0.55);
+  color: var(--neon-cyan);
+  background: rgba(0, 229, 255, 0.1);
 }
 
-
-/* (调整) 输入框包装器 */
-.input-wrapper {
-  display: flex;
-  align-items: flex-end; /* (调整) 底部对齐 */
-  gap: 0.5rem;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius);
-  background-color: var(--card-bg); /* 确保背景色 */
-  padding: 0.5rem 0.5rem 0.5rem 0.75rem; /* (调整) 内边距 */
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
-  box-shadow: var(--shadow-sm);
+.toggle-icon {
+  width: 0.78rem;
+  height: 0.78rem;
 }
 
-.input-wrapper.focused {
-  border-color: var(--primary-color);
-  box-shadow: 0 0 0 2px var(--primary-light);
-}
-
-.chat-input {
-  flex: 1;
-  border: none;
-  padding: 0.25rem 0; /* (调整) 优化 padding */
-  font-size: 0.95rem; /* (调整) */
-  background-color: transparent;
-  resize: none;
-  overflow-y: auto; /* (新增) */
-  max-height: 200px; /* (新增) 最大高度 */
-  line-height: 1.5;
-  box-shadow: none;
-}
-
-.chat-input:focus {
-  outline: none;
-  border: none;
-  box-shadow: none;
-}
-.chat-input::placeholder {
-  color: var(--text-light);
-  opacity: 0.4;
-}
-
-/* (调整) 发送按钮 */
-.send-button {
-  background-color: var(--primary-color);
-  color: white;
-  border: none;
-  border-radius: var(--radius);
-  width: 2.25rem;
-  height: 2.25rem;
-  padding: 0;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background-color 0.2s ease;
-}
-
-.send-button:hover:not(:disabled) {
-  background-color: var(--primary-dark);
-}
-
-.send-button:disabled {
-  background-color: var(--primary-light);
-  opacity: 1;
-  cursor: not-allowed;
-}
-
-.send-button .icon {
-  width: 1.25rem;
-  height: 1.25rem;
-}
-
-/* 新增：附件标签样式 */
 .attachment-chip {
   display: inline-flex;
   align-items: center;
-  gap: 0.25rem;
-  background-color: var(--bg-color);
-  color: var(--text-secondary);
-  border: 1px dashed var(--border-color);
-  border-radius: var(--radius);
-  padding: 0.25rem 0.5rem;
-  min-height: 2rem; /* 与 option-label 同高 */
-  font-size: 0.875rem; /* 与 option-label 同字号 */
+  gap: 0.28rem;
+  border: 1px solid rgba(123, 44, 191, 0.45);
+  background: rgba(123, 44, 191, 0.12);
+  color: #cf9bff;
+  padding: 0.2rem 0.45rem;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+}
+
+.attachment-name {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .chip-close {
-  background: none;
   border: none;
-  color: var(--text-secondary);
+  background: transparent;
+  color: inherit;
   cursor: pointer;
-  padding: 0 0.25rem;
+  line-height: 1;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  padding: 0 0.15rem;
+  text-transform: none;
+  letter-spacing: 0;
+  clip-path: none;
 }
 
-/* 统一附件标签内图标尺寸与颜色，匹配开关图标 */
-.attachment-chip .icon-small {
+.input-stage {
+  display: grid;
+  grid-template-columns: auto auto 1fr auto;
+  align-items: flex-end;
+  gap: 0.55rem;
+  position: relative;
+}
+
+.prompt-col {
+  align-self: start;
+  padding-top: 0.44rem;
+}
+
+.prompt-label {
+  font-family: var(--font-mono);
+  font-size: 0.73rem;
+  color: var(--neon-cyan);
+  letter-spacing: 0.04em;
+}
+
+.terminal-textarea {
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  line-height: 1.55;
+  max-height: 220px;
+  min-height: 1.45rem;
+  resize: none;
+  overflow-y: auto;
+  clip-path: none;
+  padding: 0.26rem 0;
+}
+
+.terminal-textarea::placeholder {
+  color: var(--text-muted);
+  font-style: normal;
+}
+
+.terminal-textarea:focus {
+  outline: none;
+  box-shadow: none;
+  border: none;
+}
+
+.stage-btn {
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid var(--border-dim);
+  background: rgba(0, 229, 255, 0.06);
+  color: var(--text-secondary);
+  padding: 0;
+  clip-path: polygon(5px 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%, 0 5px);
+}
+
+.stage-btn:hover:not(:disabled) {
+  color: var(--neon-cyan);
+  border-color: rgba(0, 229, 255, 0.58);
+  background: rgba(0, 229, 255, 0.16);
+}
+
+.stage-btn:disabled {
+  opacity: 0.4;
+}
+
+.stage-btn--send {
+  border-color: rgba(0, 229, 255, 0.45);
+}
+
+.stage-icon {
   width: 1rem;
   height: 1rem;
-  color: var(--text-light);
 }
 
-/* (调整) loading 动画 */
-.loading {
-  width: 1.25rem;
-  height: 1.25rem;
-  border-color: rgba(255, 255, 255, 0.4);
-  border-top-color: white;
-  margin: 0;
+.loading-dot {
+  width: 0.95rem;
+  height: 0.95rem;
+  border-radius: 50%;
+  border: 2px solid rgba(0, 229, 255, 0.2);
+  border-top-color: var(--neon-cyan);
+  display: inline-block;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.wave-lane {
+  margin-top: 0.6rem;
+  height: 24px;
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  overflow: hidden;
+  border-top: 1px solid rgba(0, 229, 255, 0.12);
+  padding-top: 0.3rem;
+}
+
+.wave-bar {
+  width: 3px;
+  min-height: 5px;
+  border-radius: 1px;
+  transform-origin: bottom;
+  animation: waveJitter 1.2s ease-in-out infinite;
+}
+
+@keyframes waveJitter {
+  0%, 100% { transform: scaleY(0.85); }
+  50% { transform: scaleY(1.15); }
+}
+
+@media (max-width: 900px) {
+  .input-stage {
+    grid-template-columns: auto 1fr auto;
+  }
+
+  .prompt-col {
+    grid-column: 1 / -1;
+    padding-top: 0;
+  }
+
+  .terminal-textarea {
+    grid-column: 1 / 3;
+  }
+
+  .attachment-name {
+    max-width: 120px;
+  }
 }
 </style>

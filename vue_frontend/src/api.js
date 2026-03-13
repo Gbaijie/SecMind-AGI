@@ -152,6 +152,10 @@ export default {
 
   getGlossary() {
     return axiosApi.get('/glossary');
+  },
+
+  getDashboardStats() {
+    return axiosApi.get('/dashboard/stats');
   }
 };
 

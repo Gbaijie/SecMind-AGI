@@ -15,13 +15,15 @@ export function useChatSession({ apiClient, messagesContainerRef, chatInputRef }
     editingMessageId,
     useDbSearch,
     useWebSearch,
+    llmProvider,
+    llmModel,
+    providerApiKey,
   } = storeToRefs(appStore)
 
   const lastUserMessage = ref('')
   const searchQuery = ref('')
 
   const messages = computed(() => messagesBySession.value[currentSession.value] || [])
-
   const filteredSessions = computed(() => {
     if (!searchQuery.value) return sessions.value
     const query = searchQuery.value.toLowerCase()
@@ -54,15 +56,6 @@ export function useChatSession({ apiClient, messagesContainerRef, chatInputRef }
     }
   }
 
-  const loadGlossary = async () => {
-    try {
-      const response = await apiClient.getGlossary()
-      appStore.setGlossary(response.data.terms || {})
-    } catch {
-      // 忽略词典拉取失败，避免阻断主流程
-    }
-  }
-
   const handleSelectSession = async (sessionId) => {
     chatStore.setCurrentSession(sessionId)
     await loadHistory(sessionId)
@@ -89,11 +82,16 @@ export function useChatSession({ apiClient, messagesContainerRef, chatInputRef }
 
   const handleClearHistory = async () => {
     if (!window.confirm(`确定要清空当前会话 "${currentSession.value}" 吗？`)) return
-
     await apiClient.clearHistory(currentSession.value)
     chatStore.clearSessionMessages(currentSession.value)
     await scrollToBottom()
   }
+
+  const buildModelOptions = () => ({
+    provider: llmProvider.value,
+    modelName: llmModel.value,
+    providerApiKey: providerApiKey.value,
+  })
 
   const handleNormalSend = async (sessionId, content, extra) => {
     lastUserMessage.value = content
@@ -111,7 +109,6 @@ export function useChatSession({ apiClient, messagesContainerRef, chatInputRef }
     appStore.setError(null)
 
     const input = extra?.attachmentText ? `${content}\n\n[附件]\n${extra.attachmentText}` : content
-
     await apiClient.streamChat(
       sessionId,
       input,
@@ -139,7 +136,8 @@ export function useChatSession({ apiClient, messagesContainerRef, chatInputRef }
       },
       null,
       useDbSearch.value,
-      useWebSearch.value
+      useWebSearch.value,
+      buildModelOptions()
     )
   }
 
@@ -219,7 +217,8 @@ export function useChatSession({ apiClient, messagesContainerRef, chatInputRef }
       },
       context,
       useDbSearch.value,
-      useWebSearch.value
+      useWebSearch.value,
+      buildModelOptions()
     )
   }
 
@@ -250,7 +249,6 @@ export function useChatSession({ apiClient, messagesContainerRef, chatInputRef }
   }
 
   const initializeChatSession = async () => {
-    await loadGlossary()
     await loadHistory(currentSession.value)
   }
 

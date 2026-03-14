@@ -72,10 +72,34 @@
           </div>
 
           <div class="modal-field">
-            <label class="modal-label">AI MODEL</label>
-            <select class="fui-select" v-model="selectedModel">
+            <label class="modal-label">MODEL PROVIDER</label>
+            <select class="fui-select" :value="llmProvider" @change="updateProvider($event.target.value)">
+              <option v-for="provider in availableProviders" :key="provider.value" :value="provider.value">
+                {{ provider.label }}
+              </option>
+            </select>
+          </div>
+
+          <div class="modal-field">
+            <label class="modal-label">MODEL NAME</label>
+            <select class="fui-select" :value="llmModel" @change="updateModel($event.target.value)">
               <option v-for="m in availableModels" :key="m" :value="m">{{ m }}</option>
             </select>
+          </div>
+
+          <div class="modal-field">
+            <label class="modal-label">PROVIDER API KEY</label>
+            <input
+              class="fui-input"
+              type="password"
+              :value="providerApiKey"
+              :placeholder="providerApiKeyPlaceholder"
+              :disabled="llmProvider === 'ollama'"
+              autocomplete="off"
+              @input="updateProviderApiKey($event.target.value)"
+            />
+            <span v-if="llmProvider === 'ollama'" class="modal-tip">本地 Ollama 不需要 API Key。</span>
+            <span v-else class="modal-tip">API Key 仅保存在当前浏览器本地并随请求发送到后端。</span>
           </div>
 
           <div class="modal-actions">
@@ -145,8 +169,15 @@ const {
   showSettingsModal,
   isExporting,
   selectedSessionForExport,
-  selectedModel,
+  llmProvider,
+  llmModel,
+  providerApiKey,
+  availableProviders,
   availableModels,
+  providerApiKeyPlaceholder,
+  updateProvider,
+  updateModel,
+  updateProviderApiKey,
   openSettingsModal,
   closeSettingsModal,
   handleExportSelectedSession,
@@ -299,7 +330,8 @@ onMounted(() => {
   color: #89a8ba;
 }
 
-.fui-select {
+.fui-select,
+.fui-input {
   height: 36px;
   border: 1px solid rgba(0, 229, 255, 0.25);
   background: rgba(3, 10, 24, 0.8);
@@ -309,9 +341,26 @@ onMounted(() => {
   padding: 0 0.6rem;
 }
 
-.fui-select:focus {
+.fui-input::placeholder {
+  color: #6f95a9;
+}
+
+.fui-select:focus,
+.fui-input:focus {
   outline: none;
   border-color: rgba(0, 229, 255, 0.52);
+}
+
+.fui-input:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.modal-tip {
+  font-size: 0.58rem;
+  color: #7ca4b8;
+  font-family: var(--font-mono);
+  letter-spacing: 0.04em;
 }
 
 .fui-icon-btn {

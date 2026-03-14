@@ -16,9 +16,11 @@ class ChatIn(Schema):
     session_id: str = "默认对话"
     user_input: str
     context: Optional[List[Dict[str, str]]] = None
-    use_db_search: bool = True  # (新增) 默认开启数据库
-    use_web_search: bool = False  # (新增) 默认关闭联网
-    model_name: Optional[str] = None  # (新增) 前端选择的模型
+    use_db_search: bool = True  # 默认开启数据库
+    use_web_search: bool = False  # 默认关闭联网
+    model_name: Optional[str] = None  # 前端选择的模型
+    provider: Optional[str] = "ollama"  # 模型提供商：ollama/openai/deepseek/minimax
+    provider_api_key: Optional[str] = None  # OpenAI 兼容提供商 API Key
 
 
 class ChatOut(Schema):

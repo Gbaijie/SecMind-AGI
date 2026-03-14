@@ -1,5 +1,9 @@
 import { defineStore } from 'pinia'
 
+const DEFAULT_PROVIDER = localStorage.getItem('llmProvider') || 'ollama'
+const DEFAULT_MODEL = localStorage.getItem('llmModel') || 'DeepSeek-R1:7b'
+const DEFAULT_PROVIDER_API_KEY = localStorage.getItem('providerApiKey') || ''
+
 export const useAppStore = defineStore('app', {
   state: () => ({
     loading: false,
@@ -8,8 +12,10 @@ export const useAppStore = defineStore('app', {
     useWebSearch: false,
     isEditing: false,
     editingMessageId: null,
-    glossary: {},
     isSidebarOpen: true,
+    llmProvider: DEFAULT_PROVIDER,
+    llmModel: DEFAULT_MODEL,
+    providerApiKey: DEFAULT_PROVIDER_API_KEY,
   }),
 
   actions: {
@@ -37,10 +43,6 @@ export const useAppStore = defineStore('app', {
       this.useWebSearch = value
     },
 
-    setGlossary(entries) {
-      this.glossary = entries || {}
-    },
-
     setEditing(messageId) {
       this.isEditing = true
       this.editingMessageId = messageId
@@ -57,6 +59,26 @@ export const useAppStore = defineStore('app', {
 
     toggleSidebar() {
       this.isSidebarOpen = !this.isSidebarOpen
+    },
+
+    setLlmProvider(provider) {
+      this.llmProvider = provider
+      localStorage.setItem('llmProvider', provider)
+    },
+
+    setLlmModel(model) {
+      this.llmModel = model
+      localStorage.setItem('llmModel', model)
+    },
+
+    setProviderApiKey(apiKey) {
+      this.providerApiKey = apiKey || ''
+      localStorage.setItem('providerApiKey', this.providerApiKey)
+    },
+
+    clearProviderApiKey() {
+      this.providerApiKey = ''
+      localStorage.removeItem('providerApiKey')
     },
   },
 })

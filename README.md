@@ -402,7 +402,6 @@ set DEEPSEEK_API_KEY=your_api_key
 | `/api/chat` | POST | 聊天接口，支持流式输出 |
 | `/api/history` | GET | 获取会话历史 |
 | `/api/history` | DELETE | 清空会话历史 |
-| `/api/glossary` | GET | 获取术语词典 |
 | `/api/upload_file` | POST | 上传文件并解析内容 |
 
 ---

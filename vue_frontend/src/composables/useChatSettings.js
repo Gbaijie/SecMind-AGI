@@ -1,16 +1,55 @@
+import { storeToRefs } from 'pinia'
+import { computed, ref, watch } from 'vue'
+import { useAppStore } from '../stores/appStore'
 import { useAuthStore } from '../stores/authStore'
 import { useChatStore } from '../stores/chatStore'
-import { ref, watch } from 'vue'
+
+const PROVIDER_OPTIONS = [
+  { value: 'ollama', label: 'Ollama (Local)' },
+  { value: 'openai', label: 'OpenAI' },
+  { value: 'deepseek', label: 'DeepSeek' },
+  { value: 'minimax', label: 'MiniMax' },
+]
+
+const MODELS_BY_PROVIDER = {
+  ollama: ['DeepSeek-R1:7b', 'Qwen3:8b', 'Llama3:8b'],
+  openai: ['gpt-4o-mini', 'gpt-4.1-mini', 'gpt-4.1'],
+  deepseek: ['deepseek-chat', 'deepseek-reasoner'],
+  minimax: ['MiniMax-M2.5', 'MiniMax-M2.5-highspeed', 'MiniMax-M2.1', 'MiniMax-M2.1-highspeed', 'MiniMax-M2'],
+}
 
 export function useChatSettings({ router, apiClient, currentSession, sessions }) {
   const authStore = useAuthStore()
   const chatStore = useChatStore()
+  const appStore = useAppStore()
+
+  const { llmProvider, llmModel, providerApiKey } = storeToRefs(appStore)
 
   const showSettingsModal = ref(false)
   const isExporting = ref(false)
   const selectedSessionForExport = ref(currentSession.value)
-  const selectedModel = ref('DeepSeek-R1')
-  const availableModels = ref(['DeepSeek-R1:7b', 'Qwen3:8b', 'Llama3:8b'])
+
+  const availableProviders = PROVIDER_OPTIONS
+  const availableModels = computed(() => MODELS_BY_PROVIDER[llmProvider.value] || [])
+
+  const providerApiKeyPlaceholder = computed(() => {
+    if (llmProvider.value === 'openai') return 'sk-...'
+    if (llmProvider.value === 'deepseek') return 'sk-...'
+    if (llmProvider.value === 'minimax') return '输入 MiniMax API Key'
+    return 'Ollama 本地模式不需要 API Key'
+  })
+
+  const updateProvider = (provider) => {
+    appStore.setLlmProvider(provider)
+  }
+
+  const updateModel = (model) => {
+    appStore.setLlmModel(model)
+  }
+
+  const updateProviderApiKey = (key) => {
+    appStore.setProviderApiKey(key)
+  }
 
   watch(
     () => currentSession.value,
@@ -27,6 +66,18 @@ export function useChatSettings({ router, apiClient, currentSession, sessions })
     (sessionList) => {
       if (!sessionList.includes(selectedSessionForExport.value)) {
         selectedSessionForExport.value = sessionList[0] || ''
+      }
+    },
+    { immediate: true }
+  )
+
+  watch(
+    llmProvider,
+    (provider) => {
+      const models = MODELS_BY_PROVIDER[provider] || []
+      if (models.length === 0) return
+      if (!models.includes(llmModel.value)) {
+        appStore.setLlmModel(models[0])
       }
     },
     { immediate: true }
@@ -106,8 +157,15 @@ export function useChatSettings({ router, apiClient, currentSession, sessions })
     showSettingsModal,
     isExporting,
     selectedSessionForExport,
-    selectedModel,
+    llmProvider,
+    llmModel,
+    providerApiKey,
+    availableProviders,
     availableModels,
+    providerApiKeyPlaceholder,
+    updateProvider,
+    updateModel,
+    updateProviderApiKey,
     openSettingsModal,
     closeSettingsModal,
     handleExportSelectedSession,

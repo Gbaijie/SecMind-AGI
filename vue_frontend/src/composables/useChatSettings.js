@@ -9,6 +9,7 @@ const PROVIDER_OPTIONS = [
   { value: 'openai', label: 'OpenAI' },
   { value: 'deepseek', label: 'DeepSeek' },
   { value: 'minimax', label: 'MiniMax' },
+  { value: 'siliconflow', label: 'SiliconFlow (硅基流动)' },
 ]
 
 const MODELS_BY_PROVIDER = {
@@ -16,6 +17,7 @@ const MODELS_BY_PROVIDER = {
   openai: ['gpt-4o-mini', 'gpt-4.1-mini', 'gpt-4.1'],
   deepseek: ['deepseek-chat', 'deepseek-reasoner'],
   minimax: ['MiniMax-M2.5', 'MiniMax-M2.5-highspeed', 'MiniMax-M2.1', 'MiniMax-M2.1-highspeed', 'MiniMax-M2'],
+  siliconflow: ['DeepSeek-V3.2', 'DeepSeek-R1', 'Qwen2.5-72B'],
 }
 
 export function useChatSettings({ router, apiClient, currentSession, sessions }) {
@@ -36,6 +38,7 @@ export function useChatSettings({ router, apiClient, currentSession, sessions })
     if (llmProvider.value === 'openai') return 'sk-...'
     if (llmProvider.value === 'deepseek') return 'sk-...'
     if (llmProvider.value === 'minimax') return '输入 MiniMax API Key'
+    if (llmProvider.value === 'siliconflow') return 'sk-...（硅基流动 API Key）'
     return 'Ollama 本地模式不需要 API Key'
   })
 

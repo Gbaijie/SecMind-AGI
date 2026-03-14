@@ -22,12 +22,23 @@ OLLAMA_MODEL_ALIASES = {
     "Qwen3:8b": "qwen3:8b",
     "Llama3:8b": "llama3:8b",
 }
+# 硅基流动模型名称映射（前端展示名 -> 硅基流动模型 ID）
+SILICONFLOW_MODEL_ALIASES = {
+    "DeepSeek-V3.2": "deepseek-ai/DeepSeek-V3.2",
+    "DeepSeek-R1": "deepseek-ai/DeepSeek-R1",
+    "Qwen2.5-72B": "Qwen/Qwen2.5-72B-Instruct",
+    "deepseek-v3.2": "deepseek-ai/DeepSeek-V3.2",
+    "deepseek-r1": "deepseek-ai/DeepSeek-R1",
+    "qwen2.5-72b": "Qwen/Qwen2.5-72B-Instruct",
+}
+
 
 # OpenAI 兼容提供商的基础 URL
 DEFAULT_OPENAI_COMPATIBLE_BASE_URLS = {
     "openai": "https://api.openai.com/v1",
     "deepseek": "https://api.deepseek.com",
     "minimax": "https://api.minimaxi.com/v1",
+    "siliconflow": "https://api.siliconflow.cn/v1",
 }
 
 # 各提供商默认模型
@@ -36,14 +47,16 @@ PROVIDER_DEFAULT_MODELS = {
     "openai": "gpt-4o-mini",
     "deepseek": "deepseek-chat",
     "minimax": "MiniMax-M2.5",
+    "siliconflow": "deepseek-ai/DeepSeek-V3.2",
 }
 
-OPENAI_COMPATIBLE_PROVIDERS = {"openai", "deepseek", "minimax"}
+OPENAI_COMPATIBLE_PROVIDERS = {"openai", "deepseek", "minimax", "siliconflow"}
 
 PROVIDER_API_KEY_ENV = {
     "openai": "OPENAI_API_KEY",
     "deepseek": "DEEPSEEK_API_KEY",
     "minimax": "MINIMAX_API_KEY",
+    "siliconflow": "SILICONFLOW_API_KEY",
 }
 
 SRE_SYSTEM_PROMPT = """
@@ -80,7 +93,7 @@ def normalize_provider(provider: Optional[str]) -> str:
     if not provider:
         return "ollama"
     normalized = provider.strip().lower()
-    if normalized in {"openai", "deepseek", "minimax", "ollama"}:
+    if normalized in {"openai", "deepseek", "minimax", "ollama", "siliconflow"}:
         return normalized
     return "ollama"
 
@@ -90,6 +103,17 @@ def resolve_model_name(provider: str, model_name: Optional[str]) -> str:
     if not normalized_model:
         return PROVIDER_DEFAULT_MODELS.get(provider, PROVIDER_DEFAULT_MODELS["ollama"])
 
+    if provider == "siliconflow":
+        custom_sf_aliases = getattr(settings, "SILICONFLOW_MODEL_ALIASES", None)
+        if isinstance(custom_sf_aliases, dict):
+            candidate = custom_sf_aliases.get(normalized_model) or custom_sf_aliases.get(normalized_model.lower())
+            if candidate:
+                return candidate
+        alias = SILICONFLOW_MODEL_ALIASES.get(normalized_model) or SILICONFLOW_MODEL_ALIASES.get(normalized_model.lower())
+        if alias:
+            return alias
+        return normalized_model
+    
     if provider != "ollama":
         return normalized_model
 
@@ -224,6 +248,11 @@ def stream_openai_compatible_response(
         delta = chunk.choices[0].delta
         if not delta:
             continue
+
+        # 部分推理模型会通过 reasoning_content 返回思考流。
+        reasoning_content = getattr(delta, "reasoning_content", None)
+        if reasoning_content:
+            yield reasoning_content
 
         content = getattr(delta, "content", None)
         if content:

@@ -56,8 +56,8 @@ class TopKLogSystem:
         Settings.llm = self.llm
         Settings.embed_model = self.embedding_model
         
-        Settings.chunk_size = 512
-        Settings.chunk_overlap = 50
+        Settings.chunk_size = 400
+        Settings.chunk_overlap = 40
 
         self.log_path = log_path
         self.log_index = None

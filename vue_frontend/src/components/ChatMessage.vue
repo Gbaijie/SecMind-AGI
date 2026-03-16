@@ -21,7 +21,8 @@
     </section>
 
     <section class="terminal-message__body">
-      <pre class="terminal-text">{{ content || '' }}</pre>
+      <pre v-if="isUser" class="terminal-text">{{ content || '' }}</pre>
+      <div v-else class="terminal-text markdown-body" v-html="renderedContent"></div>
       <span v-if="!isUser && !content" class="stream-cursor">_</span>
     </section>
 
@@ -46,6 +47,19 @@
 <script setup>
 import { computed, defineEmits, defineProps, onUnmounted, ref, watch } from 'vue'
 import { CheckIcon, ChevronDownIcon, ChevronUpIcon, CopyIcon, PencilIcon, RefreshIcon } from 'vue-tabler-icons'
+import { marked } from 'marked'
+import hljs from 'highlight.js'
+import 'highlight.js/styles/github-dark.css'
+
+marked.use({
+  renderer: {
+    code({ text, lang }) {
+      const language = hljs.getLanguage(lang) ? lang : 'plaintext'
+      const highlighted = hljs.highlight(text, { language }).value
+      return `<pre><code class="hljs ${language}">${highlighted}</code></pre>`
+    }
+  }
+})
 
 const props = defineProps({
   isUser: { type: Boolean, required: true },
@@ -73,6 +87,11 @@ const promptLabel = computed(() => {
 const toggleThink = () => {
   showThink.value = !showThink.value
 }
+
+const renderedContent = computed(() => {
+  if (!props.content) return ''
+  return marked.parse(props.content)
+})
 
 watch(
   () => props.thinkProcess,
@@ -305,6 +324,31 @@ const formatTime = (date) => {
 .icon-mini {
   width: 0.78rem;
   height: 0.78rem;
+}
+
+/* 新增 Markdown 基础样式调整 */
+:deep(.markdown-body) {
+  font-family: var(--font-mono);
+  font-size: 0.84rem;
+  line-height: 1.65;
+  color: var(--neon-cyan);
+  word-break: break-word;
+}
+
+:deep(.markdown-body p) {
+  margin: 0 0 0.5rem 0;
+}
+
+:deep(.markdown-body pre) {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border-dim);
+  padding: 0.8rem;
+  overflow-x: auto;
+  margin: 0.5rem 0;
+}
+
+:deep(.markdown-body code) {
+  font-family: var(--font-mono);
 }
 
 @media (max-width: 900px) {

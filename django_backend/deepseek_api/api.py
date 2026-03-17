@@ -14,6 +14,7 @@ from .dashboard_stats import build_dashboard_stats
 from .models import APIKey
 from .schemas import LoginIn, LoginOut, ChatIn, ChatOut, HistoryOut, ErrorResponse
 from .services import get_or_create_session, model_api_call
+from .agents import Orchestrator, OrchestratorInput, LlmConfig, MultiAgentConfig
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +84,7 @@ def chat(request, data: ChatIn):
     selected_model = data.model_name
     selected_provider = (data.provider or "ollama").strip().lower()
     provider_api_key = data.provider_api_key
+    mode = (data.mode or "").strip().lower() or "single"
 
     logger.info(
         f"搜索选项 - 数据库: {use_db_search}, 联网: {use_web_search}, provider: {selected_provider}, model: {selected_model or 'default'}"
@@ -120,20 +122,45 @@ def chat(request, data: ChatIn):
         full_clean_reply = ""
 
         try:
-            for raw_chunk in model_api_call(
-                user_input,
-                history_for_llm,
-                use_db_search,
-                use_web_search,
-                model_name=selected_model,
-                provider=selected_provider,
-                provider_api_key=provider_api_key,
-            ):
-                if not raw_chunk:
-                    continue
+            if mode != "multi_agent":
+                for raw_chunk in model_api_call(
+                    user_input,
+                    history_for_llm,
+                    use_db_search,
+                    use_web_search,
+                    model_name=selected_model,
+                    provider=selected_provider,
+                    provider_api_key=provider_api_key,
+                ):
+                    if not raw_chunk:
+                        continue
 
-                yield "data: " + json.dumps({"type": "content", "chunk": raw_chunk}) + "\n\n"
-                full_clean_reply += raw_chunk
+                    yield "data: " + json.dumps({"type": "content", "chunk": raw_chunk}) + "\n\n"
+                    full_clean_reply += raw_chunk
+            else:
+                # multi-agent SSE：按 agent_id 推送中间过程与最终综合输出
+                base_llm = LlmConfig(provider=selected_provider, model=selected_model, provider_api_key=provider_api_key)
+                agent_cfgs = data.agent_configs or {}
+
+                def _cfg(agent_id: str) -> LlmConfig:
+                    raw = agent_cfgs.get(agent_id) if isinstance(agent_cfgs, dict) else None
+                    if not isinstance(raw, dict):
+                        return base_llm
+                    return LlmConfig(
+                        provider=(raw.get("provider") or base_llm.provider or "ollama"),
+                        model=(raw.get("model") or base_llm.model),
+                        provider_api_key=(raw.get("provider_api_key") or base_llm.provider_api_key),
+                    )
+
+                cfg = MultiAgentConfig(rag=_cfg("rag"), web=_cfg("web"), synthesis=_cfg("synthesis"))
+                orch = Orchestrator()
+                for evt in orch.run_stream(
+                    OrchestratorInput(query=user_input, history=history_for_llm, enable_rag=use_db_search, enable_web=use_web_search),
+                    cfg,
+                ):
+                    yield "data: " + json.dumps(evt, ensure_ascii=False) + "\n\n"
+                    if evt.get("type") == "agent_chunk" and evt.get("agent_id") == "synthesis":
+                        full_clean_reply += evt.get("content", "")
 
             try:
                 final_save = full_clean_reply.strip()
@@ -174,7 +201,13 @@ def chat(request, data: ChatIn):
 
         except Exception as e:
             logger.error(f"流式生成失败: {e}")
-            yield "data: " + json.dumps({"type": "error", "chunk": f"流处理失败: {e}"}) + "\n\n"
+            if mode == "multi_agent":
+                yield "data: " + json.dumps(
+                    {"type": "agent_status", "agent_id": "synthesis", "status": "error", "error": f"流处理失败: {e}"},
+                    ensure_ascii=False,
+                ) + "\n\n"
+            else:
+                yield "data: " + json.dumps({"type": "error", "chunk": f"流处理失败: {e}"}) + "\n\n"
 
     response = StreamingHttpResponse(stream_generator(), content_type="text/event-stream")
     response["X-Accel-Buffering"] = "no"

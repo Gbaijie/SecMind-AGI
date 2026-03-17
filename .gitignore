@@ -13,7 +13,14 @@ db.sqlite3
 django_backend/data/vector_stores/
 
 # vscode
-.vscode
+.vscode/  # 补充 /，明确匹配文件夹，和其他规则格式统一
 
 # nodejs
 vue_frontend/node_modules/
+
+# 忽略 注释 文件夹（末尾的 / 表示匹配文件夹）
+注释/
+
+# 忽略测试结果
+output_cloud.txt
+output_local.txt

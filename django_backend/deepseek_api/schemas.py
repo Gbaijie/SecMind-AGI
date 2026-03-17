@@ -21,6 +21,14 @@ class ChatIn(Schema):
     model_name: Optional[str] = None  # 前端选择的模型
     provider: Optional[str] = "ollama"  # 模型提供商：ollama/openai/deepseek/minimax/siliconflow
     provider_api_key: Optional[str] = None  # OpenAI 兼容提供商 API Key
+    mode: Optional[str] = None  # single / multi_agent
+    agent_configs: Optional[Dict[str, Dict[str, Optional[str]]]] = None
+    # agent_configs 示例：
+    # {
+    #   "rag": {"provider":"ollama","model":"deepseek-r1:7b","provider_api_key":null},
+    #   "web": {"provider":"deepseek","model":"deepseek-chat","provider_api_key":"..."},
+    #   "synthesis": {"provider":"ollama","model":"deepseek-r1:7b","provider_api_key":null}
+    # }
 
 
 class ChatOut(Schema):

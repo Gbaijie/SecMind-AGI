@@ -3,12 +3,13 @@ import logging
 import os
 import threading
 import time
-from typing import Dict, Optional, List
+from typing import Dict, Optional, List, Iterable
 
 from ddgs import DDGS
 from django.conf import settings
 from django.core.cache import cache
 from openai import OpenAI
+from langchain_core.messages import BaseMessage
 
 from topklogsystem import TopKLogSystem
 from .models import APIKey, RateLimit, ConversationSession
@@ -258,6 +259,81 @@ def stream_openai_compatible_response(
         content = getattr(delta, "content", None)
         if content:
             yield content
+
+
+def stream_llm_from_messages(
+    provider: str,
+    messages: List[BaseMessage] | List[Dict[str, str]],
+    model_name: Optional[str] = None,
+    provider_api_key: Optional[str] = None,
+) -> Iterable[str]:
+    """
+    通用流式 LLM 调用：
+    - OpenAI-compatible: 接收 dict messages（role/content）或 LangChain BaseMessage
+    - Ollama: 使用 TopKLogSystem 内部的 OllamaLLM 进行 stream（接收 LangChain BaseMessage 列表）
+    """
+    provider_name = normalize_provider(provider)
+    resolved_model_name = resolve_model_name(provider_name, model_name)
+
+    if provider_name in OPENAI_COMPATIBLE_PROVIDERS:
+        api_key = resolve_provider_api_key(provider_name, provider_api_key)
+        if not api_key:
+            yield f"错误：{provider_name} API Key 为空，请在设置中填写后重试。"
+            return
+
+        # 兼容 LangChain BaseMessage -> OpenAI messages
+        if messages and isinstance(messages[0], BaseMessage):
+            oa_messages: List[Dict[str, str]] = []
+            for m in messages:  # type: ignore[assignment]
+                role = getattr(m, "type", None) or getattr(m, "role", None) or "user"
+                # langchain_core: HumanMessage.type == "human"
+                if role == "human":
+                    role = "user"
+                elif role == "ai":
+                    role = "assistant"
+                content = getattr(m, "content", "")
+                oa_messages.append({"role": role, "content": str(content)})
+        else:
+            oa_messages = messages  # type: ignore[assignment]
+
+        base_url = resolve_provider_base_url(provider_name)
+        client = OpenAI(api_key=api_key, base_url=base_url)
+        request_kwargs = {"model": resolved_model_name, "messages": oa_messages, "stream": True}
+        if provider_name == "minimax":
+            request_kwargs["extra_body"] = {"reasoning_split": True}
+            request_kwargs["temperature"] = 1.0
+
+        stream = client.chat.completions.create(**request_kwargs)
+        for chunk in stream:
+            if not getattr(chunk, "choices", None):
+                continue
+            delta = chunk.choices[0].delta
+            if not delta:
+                continue
+            reasoning_content = getattr(delta, "reasoning_content", None)
+            if reasoning_content:
+                yield reasoning_content
+            content = getattr(delta, "content", None)
+            if content:
+                yield content
+        return
+
+    if provider_name != "ollama":
+        yield f"错误：当前 provider={provider_name} 不支持该调用方式。"
+        return
+
+    if log_system is None:
+        yield "错误：日志分析系统未成功初始化，无法调用 ollama。"
+        return
+
+    # OllamaLLM.stream 需要 LangChain messages
+    if not messages or not isinstance(messages[0], BaseMessage):
+        yield "错误：ollama 调用需要 LangChain messages。"
+        return
+
+    llm = log_system._get_or_create_llm(resolved_model_name)  # 复用缓存，避免重复加载
+    for chunk in llm.stream(messages):  # type: ignore[arg-type]
+        yield chunk
 
 
 def model_api_call(

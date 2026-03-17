@@ -1,0 +1,8 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "/^cd /root/DeepSoc/django_backend && python3 -m py_compile deepseek_api/api\\.py deepseek_api/services\\.py deepseek_api/schemas\\.py$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}

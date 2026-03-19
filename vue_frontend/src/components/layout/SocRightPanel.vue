@@ -1,86 +1,104 @@
 <template>
   <div class="soc-right-panel">
-    <FuiCard title="THREAT RADAR" class="chart-card">
-      <template #actions>
-        <button
-          type="button"
-          class="panel-action-btn"
-          aria-label="Expand THREAT RADAR"
-          @click="openExpanded('radar')"
-        >
-          <svg viewBox="0 0 16 16" class="action-icon" aria-hidden="true">
-            <path d="M1 6V1h5v2H3v3H1zm14 0h-2V3h-3V1h5v5zM1 10h2v3h3v2H1v-5zm12 5v-2h-3v-2h5v4h-2z" />
-          </svg>
-          <MaximizeIcon class="action-icon" />
-        </button>
-      </template>
-      <ThreatRadarChart :stats="dashboardStats" :loading="statsLoading" />
-    </FuiCard>
+    <div ref="radarPanelRef" class="panel-host">
+      <FuiCard title="THREAT RADAR" class="chart-card">
+        <template #actions>
+          <button
+            type="button"
+            class="panel-action-btn"
+            :aria-label="isPanelActive('radar') ? 'Exit fullscreen THREAT RADAR' : 'Expand THREAT RADAR'"
+            @click="toggleChartPanel('radar')"
+          >
+            <svg v-if="isPanelActive('radar')" viewBox="0 0 16 16" class="action-icon" aria-hidden="true">
+              <path d="M4 4h8v8H4z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+            <svg v-else viewBox="0 0 16 16" class="action-icon" aria-hidden="true">
+              <path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </button>
+        </template>
+        <ThreatRadarChart :stats="dashboardStats" :loading="statsLoading" />
+      </FuiCard>
+    </div>
 
-    <FuiCard title="LOG INGEST STREAM" class="chart-card">
-      <template #actions>
-        <button
-          type="button"
-          class="panel-action-btn"
-          aria-label="Expand LOG INGEST STREAM"
-          @click="openExpanded('stream')"
-        >
-          <svg viewBox="0 0 16 16" class="action-icon" aria-hidden="true">
-            <path d="M1 6V1h5v2H3v3H1zm14 0h-2V3h-3V1h5v5zM1 10h2v3h3v2H1v-5zm12 5v-2h-3v-2h5v4h-2z" />
-          </svg>
-        </button>
-      </template>
-      <LogInflowChart :stats="dashboardStats" :loading="statsLoading" />
-    </FuiCard>
+    <div ref="streamPanelRef" class="panel-host">
+      <FuiCard title="LOG INGEST STREAM" class="chart-card">
+        <template #actions>
+          <button
+            type="button"
+            class="panel-action-btn"
+            :aria-label="isPanelActive('stream') ? 'Exit fullscreen LOG INGEST STREAM' : 'Expand LOG INGEST STREAM'"
+            @click="toggleChartPanel('stream')"
+          >
+            <svg v-if="isPanelActive('stream')" viewBox="0 0 16 16" class="action-icon" aria-hidden="true">
+              <path d="M4 4h8v8H4z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+            <svg v-else viewBox="0 0 16 16" class="action-icon" aria-hidden="true">
+              <path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </button>
+        </template>
+        <LogInflowChart :stats="dashboardStats" :loading="statsLoading" />
+      </FuiCard>
+    </div>
 
-    <FuiCard title="CATEGORY DISTRIBUTION" class="chart-card category-card">
-      <template #actions>
-        <button
-          type="button"
-          class="panel-action-btn"
-          aria-label="Expand CATEGORY DISTRIBUTION"
-          @click="openExpanded('category')"
-        >
-          <svg viewBox="0 0 16 16" class="action-icon" aria-hidden="true">
-            <path d="M1 6V1h5v2H3v3H1zm14 0h-2V3h-3V1h5v5zM1 10h2v3h3v2H1v-5zm12 5v-2h-3v-2h5v4h-2z" />
-          </svg>
-        </button>
-      </template>
-      <div class="summary-strip">
-        <span>RECORDS {{ dashboardStats.summary?.total_records || 0 }}</span>
-        <span>SOURCES {{ dashboardStats.summary?.total_sources || 0 }}</span>
-        <span>CAT {{ dashboardStats.summary?.total_categories || 0 }}</span>
-      </div>
-      <CategoryDonutChart :stats="dashboardStats" :loading="statsLoading" />
-    </FuiCard>
+    <div ref="categoryPanelRef" class="panel-host">
+      <FuiCard title="CATEGORY DISTRIBUTION" class="chart-card category-card">
+        <template #actions>
+          <button
+            type="button"
+            class="panel-action-btn"
+            :aria-label="isPanelActive('category') ? 'Exit fullscreen CATEGORY DISTRIBUTION' : 'Expand CATEGORY DISTRIBUTION'"
+            @click="toggleChartPanel('category')"
+          >
+            <svg v-if="isPanelActive('category')" viewBox="0 0 16 16" class="action-icon" aria-hidden="true">
+              <path d="M4 4h8v8H4z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+            <svg v-else viewBox="0 0 16 16" class="action-icon" aria-hidden="true">
+              <path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </button>
+        </template>
+        <div class="summary-strip">
+          <span>RECORDS {{ dashboardStats.summary?.total_records || 0 }}</span>
+          <span>SOURCES {{ dashboardStats.summary?.total_sources || 0 }}</span>
+          <span>CAT {{ dashboardStats.summary?.total_categories || 0 }}</span>
+        </div>
+        <CategoryDonutChart :stats="dashboardStats" :loading="statsLoading" />
+      </FuiCard>
+    </div>
   </div>
 
   <Teleport to="body">
     <div
-      v-if="expandedPanel"
+      v-if="fallbackPanelKey"
       class="chart-modal-mask"
       role="dialog"
       aria-modal="true"
       @click.self="closeExpanded"
     >
       <div class="chart-modal-wrap">
-        <FuiCard :title="expandedTitle" class="chart-card chart-card--expanded">
-          <template #actions>
-          <button
-            type="button"
-            class="panel-action-btn panel-action-btn--close"
-            aria-label="Close expanded chart"
-            @click="closeExpanded"
-          >
-            <XIcon class="action-icon" />
-          </button>
+        <NCard class="chart-modal-card" :bordered="false" embedded>
+          <template #header>
+            <span class="chart-modal-title">{{ expandedTitle }}</span>
+          </template>
+          <template #header-extra>
+            <NButton
+              class="panel-action-btn panel-action-btn--close"
+              quaternary
+              circle
+              aria-label="Close expanded chart"
+              @click="closeExpanded"
+            >
+              <XIcon class="action-icon" />
+            </NButton>
           </template>
 
-          <div class="expanded-chart-content" v-if="expandedPanel === 'radar'">
+          <div class="expanded-chart-content" v-if="fallbackPanelKey === 'radar'">
             <ThreatRadarChart :stats="dashboardStats" :loading="statsLoading" />
           </div>
 
-          <div class="expanded-chart-content" v-else-if="expandedPanel === 'stream'">
+          <div class="expanded-chart-content" v-else-if="fallbackPanelKey === 'stream'">
             <LogInflowChart :stats="dashboardStats" :loading="statsLoading" />
           </div>
 
@@ -94,7 +112,7 @@
               <CategoryDonutChart :stats="dashboardStats" :loading="statsLoading" />
             </div>
           </div>
-        </FuiCard>
+        </NCard>
       </div>
     </div>
   </Teleport>
@@ -102,18 +120,28 @@
 
 <script setup>
 import { computed, ref } from 'vue'
-import { MaximizeIcon, XIcon } from 'vue-tabler-icons'
+import { NButton, NCard } from 'naive-ui'
+import { XIcon } from 'vue-tabler-icons'
 import FuiCard from '../FuiCard.vue'
 import LogInflowChart from '../charts/LogInflowChart.vue'
 import ThreatRadarChart from '../charts/ThreatRadarChart.vue'
 import CategoryDonutChart from '../charts/CategoryDonutChart.vue'
+import { useFullscreenPanel } from '../../composables/useFullscreenPanel'
 
 defineProps({
   dashboardStats: { type: Object, default: () => ({}) },
   statsLoading: { type: Boolean, default: false },
 })
 
-const expandedPanel = ref('')
+const radarPanelRef = ref(null)
+const streamPanelRef = ref(null)
+const categoryPanelRef = ref(null)
+
+const { fallbackPanelKey, togglePanel, closeFallbackPanel, isPanelActive } = useFullscreenPanel({
+  radar: radarPanelRef,
+  stream: streamPanelRef,
+  category: categoryPanelRef,
+})
 
 const expandedTitle = computed(() => {
   const titleMap = {
@@ -121,15 +149,15 @@ const expandedTitle = computed(() => {
     stream: 'LOG INGEST STREAM',
     category: 'CATEGORY DISTRIBUTION',
   }
-  return titleMap[expandedPanel.value] || ''
+  return titleMap[fallbackPanelKey.value] || ''
 })
 
-const openExpanded = (panelKey) => {
-  expandedPanel.value = panelKey
+const toggleChartPanel = (panelKey) => {
+  togglePanel(panelKey)
 }
 
 const closeExpanded = () => {
-  expandedPanel.value = ''
+  closeFallbackPanel()
 }
 </script>
 
@@ -141,12 +169,55 @@ const closeExpanded = () => {
   gap: 0.9rem;
 }
 
+.panel-host {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .chart-card {
   min-height: 240px;
 }
 
+.chart-card :deep(.fui-card-header) {
+  padding-right: 1.2rem;
+}
+
+.chart-card :deep(.fui-card-header-right) {
+  position: relative;
+  z-index: 6;
+  padding-right: 0.35rem;
+}
+
+.chart-card :deep(.corner-tr) {
+  opacity: 0.3;
+}
+
+.panel-host:fullscreen,
+.panel-host:-webkit-full-screen {
+  background: #050814;
+  padding: 0.9rem;
+}
+
+.panel-host:fullscreen .chart-card,
+.panel-host:-webkit-full-screen .chart-card {
+  height: 100%;
+  min-height: 0;
+}
+
+.panel-host:fullscreen .chart-card :deep(.fui-card-body),
+.panel-host:-webkit-full-screen .chart-card :deep(.fui-card-body),
+.panel-host:fullscreen .chart-wrap,
+.panel-host:-webkit-full-screen .chart-wrap,
+.panel-host:fullscreen .chart-canvas,
+.panel-host:-webkit-full-screen .chart-canvas {
+  min-height: 0;
+  height: 100%;
+}
+
 .panel-action-btn {
   width: 24px;
+  min-width: 24px;
   height: 24px;
   display: inline-flex;
   align-items: center;
@@ -155,6 +226,8 @@ const closeExpanded = () => {
   border: 1px solid rgba(0, 229, 255, 0.42);
   color: var(--neon-cyan);
   cursor: pointer;
+  position: relative;
+  z-index: 7;
   transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
 }
 
@@ -186,7 +259,7 @@ const closeExpanded = () => {
   position: fixed;
   inset: 0;
   z-index: 10000;
-  background: rgba(3, 8, 18, 0.9);
+  background: rgba(3, 8, 18, 0.92);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -197,21 +270,37 @@ const closeExpanded = () => {
   width: min(1120px, 92vw);
 }
 
-.chart-card--expanded {
+.chart-modal-card {
   height: min(76vh, 820px);
   min-height: 520px;
+  border: 1px solid rgba(0, 229, 255, 0.3);
+  background: rgba(7, 15, 30, 0.95);
 }
 
-.chart-card--expanded :deep(.scanline-overlay) {
-  display: none;
+.chart-modal-card :deep(.n-card-header) {
+  border-bottom: 1px solid rgba(0, 229, 255, 0.2);
+  background: linear-gradient(90deg, rgba(0, 229, 255, 0.09), transparent 60%);
 }
 
-.chart-card--expanded :deep(.corner) {
-  opacity: 0.35;
-}
-
-.chart-card--expanded :deep(.fui-card-body) {
+.chart-modal-card :deep(.n-card__content) {
   min-height: 0;
+  height: calc(100% - 56px);
+  display: flex;
+  flex-direction: column;
+  padding-top: 0.7rem;
+}
+
+.chart-modal-title {
+  font-family: var(--font-ui);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.11em;
+  color: var(--neon-cyan);
+}
+
+.panel-action-btn--close {
+  width: 24px;
+  height: 24px;
 }
 
 .expanded-chart-content {
@@ -228,24 +317,16 @@ const closeExpanded = () => {
   flex-direction: column;
 }
 
-.chart-card--expanded :deep(.chart-wrap) {
+.chart-modal-card :deep(.chart-wrap) {
   min-height: 0;
   flex: 1;
   display: flex;
   flex-direction: column;
 }
 
-.chart-card--expanded :deep(.chart-canvas) {
+.chart-modal-card :deep(.chart-canvas) {
   min-height: 0;
   flex: 1;
-}
-
-.panel-action-btn--close {
-  font-family: var(--font-ui);
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  line-height: 1;
 }
 
 .category-card {
@@ -282,7 +363,7 @@ const closeExpanded = () => {
     width: min(980px, 96vw);
   }
 
-  .chart-card--expanded {
+  .chart-modal-card {
     height: min(72vh, 760px);
     min-height: 430px;
   }

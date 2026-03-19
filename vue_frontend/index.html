@@ -5,11 +5,32 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>DeepSOC — Security Operations Center</title>
-    <!-- FUI 字体：Rajdhani（标题/数据）, Orbitron（品牌/DEFCON）, Roboto Mono（终端/代码） -->
+
+    <!-- 基础字体：HarmonyOS Sans 通过 CDN 动态加载，降低本地打包体积 -->
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+    <link
+      rel="preload"
+      as="style"
+      href="https://cdn.jsdelivr.net/npm/harmonyos-sans-sc-webfont-splitted@1.1.0/dist/index.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/harmonyos-sans-sc-webfont-splitted@1.1.0/dist/index.css"
+      media="print"
+      onload="this.media='all'"
+    />
+    <noscript>
+      <link
+        rel="stylesheet"
+        href="https://cdn.jsdelivr.net/npm/harmonyos-sans-sc-webfont-splitted@1.1.0/dist/index.css"
+      />
+    </noscript>
+
+    <!-- 品牌/终端字体 -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Orbitron:wght@400;700;900&family=Roboto+Mono:wght@400;500&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Roboto+Mono:wght@400;500&display=swap"
       rel="stylesheet"
     />
   </head>

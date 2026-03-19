@@ -8,54 +8,118 @@
       @open-settings="openSettingsModal"
     />
 
-    <main class="soc-main" :class="{ 'sidebar-collapsed': !isSidebarOpen }">
-      <aside class="panel-left" v-show="isSidebarOpen">
-        <SocSidebar
-          :search-query="searchQuery"
-          :filtered-sessions="filteredSessions"
-          :current-session="currentSession"
-          @update:search-query="searchQuery = $event"
-          @select-session="handleSelectSession"
-          @delete-session="handleDeleteSession"
-          @create-session="handleCreateSession"
-          @clear-history="handleClearHistory"
-        />
-      </aside>
+    <main class="soc-main">
+      <Splitpanes class="soc-split" :horizontal="isCompactLayout">
+        <Pane
+          v-if="isSidebarOpen"
+          class="pane-left"
+          :size="leftPaneSize"
+          :min-size="isCompactLayout ? 20 : 14"
+          :max-size="isCompactLayout ? 36 : 30"
+        >
+          <aside class="panel-left">
+            <SocSidebar
+              :search-query="searchQuery"
+              :filtered-sessions="filteredSessions"
+              :current-session="currentSession"
+              @update:search-query="searchQuery = $event"
+              @select-session="handleSelectSession"
+              @delete-session="handleDeleteSession"
+              @create-session="handleCreateSession"
+              @clear-history="handleClearHistory"
+            />
+          </aside>
+        </Pane>
 
-      <section class="panel-center">
-        <FuiCard v-if="!isTopologyCollapsed" title="GLOBAL ATTACK TOPOLOGY" class="center-topology-card" :glow="true">
-          <template #actions>
-            <button class="fui-icon-btn" @click="toggleTopology" title="折叠拓扑图">
-              <ChevronUpIcon class="btn-icon" />
-            </button>
-          </template>
-          <TopologyScene :topology="dashboardStats.topology" />
-        </FuiCard>
+        <Pane
+          class="pane-center"
+          :size="centerPaneSize"
+          :min-size="isCompactLayout ? 34 : 38"
+        >
+          <section class="panel-center">
+            <div ref="topologyPanelRef" class="topology-panel-host" v-if="!isTopologyCollapsed">
+              <FuiCard title="GLOBAL ATTACK TOPOLOGY" class="center-topology-card" :glow="true">
+                <template #actions>
+                  <button
+                    class="fui-icon-btn"
+                    :title="isPanelActive('topology') ? '退出全屏拓扑图' : '全屏拓扑图'"
+                    @click="toggleTopologyFullscreen"
+                  >
+                    <MinimizeIcon v-if="isPanelActive('topology')" class="btn-icon" />
+                    <MaximizeIcon v-else class="btn-icon" />
+                  </button>
+                  <button class="fui-icon-btn" @click="toggleTopology" title="折叠拓扑图">
+                    <ChevronUpIcon class="btn-icon" />
+                  </button>
+                </template>
+                <TopologyScene :topology="dashboardStats.topology" />
+              </FuiCard>
+            </div>
 
-        <div v-else class="topology-collapsed-bar">
-          <button class="topology-restore-btn" @click="toggleTopology">
-            <ChevronDownIcon class="btn-icon" />
-            SHOW GLOBAL ATTACK TOPOLOGY
-          </button>
-        </div>
+            <div v-else class="topology-collapsed-bar">
+              <button class="topology-restore-btn" @click="toggleTopology">
+                <ChevronDownIcon class="btn-icon" />
+                SHOW GLOBAL ATTACK TOPOLOGY
+              </button>
+            </div>
 
-        <Chat
-          :current-session="currentSession"
-          :messages="messages"
-          :loading="loading"
-          :error="error"
-          :on-send-message="handleSendMessage"
-          :on-regenerate="handleRegenerate"
-          :on-edit-message="handleEditMessage"
-          :messages-container-ref="messagesContainerRef"
-          :chat-input-ref="chatInputRef"
-        />
-      </section>
+            <Chat
+              :current-session="currentSession"
+              :messages="messages"
+              :loading="loading"
+              :error="error"
+              :on-send-message="handleSendMessage"
+              :on-regenerate="handleRegenerate"
+              :on-edit-message="handleEditMessage"
+              :messages-container-ref="messagesContainerRef"
+              :chat-input-ref="chatInputRef"
+            />
+          </section>
+        </Pane>
 
-      <aside class="panel-right">
-        <SocRightPanel :dashboard-stats="dashboardStats" :stats-loading="statsLoading" />
-      </aside>
+        <Pane
+          class="pane-right"
+          :size="rightPaneSize"
+          :min-size="isCompactLayout ? 24 : 20"
+        >
+          <aside class="panel-right">
+            <SocRightPanel :dashboard-stats="dashboardStats" :stats-loading="statsLoading" />
+          </aside>
+        </Pane>
+      </Splitpanes>
     </main>
+
+    <Teleport to="body">
+      <div
+        v-if="fallbackPanelKey === 'topology'"
+        class="topology-modal-mask"
+        role="dialog"
+        aria-modal="true"
+        @click.self="closeTopologyFallback"
+      >
+        <div class="topology-modal-wrap">
+          <NCard class="topology-modal-card" :bordered="false" embedded>
+            <template #header>
+              <span class="topology-modal-title">GLOBAL ATTACK TOPOLOGY</span>
+            </template>
+            <template #header-extra>
+              <NButton
+                class="fui-icon-btn"
+                quaternary
+                circle
+                aria-label="Close topology fullscreen"
+                @click="closeTopologyFallback"
+              >
+                <XIcon class="btn-icon" />
+              </NButton>
+            </template>
+            <div class="topology-modal-content">
+              <TopologyScene :topology="dashboardStats.topology" />
+            </div>
+          </NCard>
+        </div>
+      </div>
+    </Teleport>
 
     <div v-if="showSettingsModal" class="fui-modal-overlay" @click.self="closeSettingsModal">
       <FuiCard title="SYSTEM CONFIG" class="fui-modal-card" :clip="18">
@@ -102,19 +166,18 @@
             <span v-else class="modal-tip">API Key 仅保存在当前浏览器本地并随请求发送到后端。</span>
           </div>
 
-            <div class="modal-field">
-              <label class="modal-label">WEB SEARCH API KEY</label>
-              <input
-                class="fui-input"
-                type="password"
-                :value="webSearchApiKey"
-                :placeholder="webSearchApiKeyPlaceholder"
-                autocomplete="off"
-                @input="updateWebSearchApiKey($event.target.value)"
-              />
-              <span class="modal-tip">联网搜索 API Key 仅保存在当前浏览器本地并随请求发送到后端。</span>
-            </div>
-
+          <div class="modal-field">
+            <label class="modal-label">WEB SEARCH API KEY</label>
+            <input
+              class="fui-input"
+              type="password"
+              :value="webSearchApiKey"
+              :placeholder="webSearchApiKeyPlaceholder"
+              autocomplete="off"
+              @input="updateWebSearchApiKey($event.target.value)"
+            />
+            <span class="modal-tip">联网搜索 API Key 仅保存在当前浏览器本地并随请求发送到后端。</span>
+          </div>
 
           <div class="modal-actions">
             <button class="primary" :disabled="isExporting" @click="handleExportSelectedSession">
@@ -133,9 +196,20 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ChevronDownIcon, ChevronUpIcon, DownloadIcon, LogoutIcon, XIcon } from 'vue-tabler-icons'
+import { NButton, NCard } from 'naive-ui'
+import { Pane, Splitpanes } from 'splitpanes'
+import {
+  ChevronDownIcon,
+  ChevronUpIcon,
+  DownloadIcon,
+  LogoutIcon,
+  MaximizeIcon,
+  MinimizeIcon,
+  XIcon,
+} from 'vue-tabler-icons'
+import 'splitpanes/dist/splitpanes.css'
 import api from '../api'
 import FuiCard from '../components/FuiCard.vue'
 import TopologyScene from '../components/TopologyScene.vue'
@@ -146,14 +220,17 @@ import { useClock } from '../composables/useClock'
 import { useDashboardStats } from '../composables/useDashboardStats'
 import { useChatSession } from '../composables/useChatSession'
 import { useChatSettings } from '../composables/useChatSettings'
+import { useFullscreenPanel } from '../composables/useFullscreenPanel'
 import { useAppStore } from '../stores/appStore'
 import Chat from '../views/Chat.vue'
 
 const router = useRouter()
 const appStore = useAppStore()
 const isTopologyCollapsed = ref(false)
+const isCompactLayout = ref(false)
 const messagesContainerRef = ref(null)
 const chatInputRef = ref(null)
+const topologyPanelRef = ref(null)
 
 const { currentTime } = useClock()
 const { dashboardStats, statsLoading } = useDashboardStats(api)
@@ -206,7 +283,27 @@ const {
   sessions,
 })
 
+const { fallbackPanelKey, togglePanel, closeFallbackPanel, isPanelActive } = useFullscreenPanel({
+  topology: topologyPanelRef,
+})
+
 const isSidebarOpen = computed(() => appStore.isSidebarOpen)
+
+const leftPaneSize = computed(() => (isCompactLayout.value ? 26 : 20))
+
+const centerPaneSize = computed(() => {
+  if (isSidebarOpen.value) {
+    return isCompactLayout.value ? 44 : 52
+  }
+  return isCompactLayout.value ? 58 : 68
+})
+
+const rightPaneSize = computed(() => {
+  if (isSidebarOpen.value) {
+    return isCompactLayout.value ? 30 : 28
+  }
+  return isCompactLayout.value ? 42 : 32
+})
 
 const toggleSidebar = () => {
   appStore.toggleSidebar()
@@ -216,8 +313,26 @@ const toggleTopology = () => {
   isTopologyCollapsed.value = !isTopologyCollapsed.value
 }
 
+const toggleTopologyFullscreen = () => {
+  togglePanel('topology')
+}
+
+const closeTopologyFallback = () => {
+  closeFallbackPanel()
+}
+
+const syncLayoutMode = () => {
+  isCompactLayout.value = window.innerWidth <= 1024
+}
+
 onMounted(() => {
   initializeChatSession()
+  syncLayoutMode()
+  window.addEventListener('resize', syncLayoutMode)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', syncLayoutMode)
 })
 </script>
 
@@ -234,47 +349,113 @@ onMounted(() => {
 
 .soc-main {
   min-height: 0;
-  display: grid;
-  grid-template-columns: minmax(240px, 280px) minmax(480px, 1fr) minmax(280px, 360px);
-  gap: 0.9rem;
   padding: 0.85rem;
   overflow: hidden;
 }
 
-.soc-main.sidebar-collapsed {
-  grid-template-columns: 0px minmax(480px, 1fr) minmax(280px, 360px);
+.soc-split {
+  width: 100%;
+  height: 100%;
 }
 
-.panel-left {
-  grid-column: 1;
-}
-.panel-center {
-  grid-column: 2;
-}
-.panel-right {
-  grid-column: 3;
-}
-
-.panel-left,
-.panel-center,
-.panel-right {
+.soc-split :deep(.splitpanes__pane) {
   min-height: 0;
+  background: transparent;
+  box-sizing: border-box;
+  padding: 0 0.32rem;
+}
+
+.soc-split :deep(.splitpanes__pane:first-child) {
+  padding-left: 0;
+}
+
+.soc-split :deep(.splitpanes__pane:last-child) {
+  padding-right: 0;
+}
+
+.soc-split :deep(.splitpanes__splitter) {
+  position: relative;
+  background: transparent;
+  transition: background-color 0.2s ease;
+}
+
+.soc-split :deep(.splitpanes__splitter::before) {
+  content: '';
+  position: absolute;
+  inset: 10px 3px;
+  border-radius: 6px;
+  border: 1px solid rgba(0, 229, 255, 0.2);
+  background: linear-gradient(180deg, rgba(0, 229, 255, 0.1), rgba(0, 229, 255, 0.03));
+}
+
+.soc-split :deep(.splitpanes__splitter:hover::before) {
+  border-color: rgba(0, 229, 255, 0.52);
+  box-shadow: 0 0 12px rgba(0, 229, 255, 0.18);
+}
+
+.soc-split :deep(.splitpanes--vertical > .splitpanes__splitter) {
+  width: 14px;
+  background: linear-gradient(90deg, transparent 0%, rgba(0, 229, 255, 0.1) 50%, transparent 100%);
+}
+
+.soc-split :deep(.splitpanes--horizontal > .splitpanes__splitter) {
+  height: 14px;
+  background: linear-gradient(180deg, transparent 0%, rgba(0, 229, 255, 0.1) 50%, transparent 100%);
+}
+
+.soc-split :deep(.splitpanes--horizontal > .splitpanes__splitter::before) {
+  inset: 3px 10px;
 }
 
 .panel-left,
-.panel-center {
+.panel-right {
   display: flex;
   flex-direction: column;
 }
 
 .panel-center {
+  display: flex;
+  flex-direction: column;
   gap: 0.9rem;
   overflow: hidden;
 }
 
-.center-topology-card {
-  flex: 0 0 40%;
+.panel-center :deep(.terminal-shell) {
+  flex: 1;
+  min-height: 0;
+}
+
+.topology-panel-host {
   min-height: 220px;
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+}
+
+.topology-panel-host:fullscreen,
+.topology-panel-host:-webkit-full-screen {
+  background: #050814;
+  padding: 0.9rem;
+}
+
+.topology-panel-host:fullscreen .center-topology-card,
+.topology-panel-host:-webkit-full-screen .center-topology-card {
+  min-height: 0;
+  height: 100%;
+}
+
+.topology-panel-host:fullscreen .center-topology-card :deep(.fui-card-body),
+.topology-panel-host:-webkit-full-screen .center-topology-card :deep(.fui-card-body),
+.topology-panel-host:fullscreen :deep(.topology-scene),
+.topology-panel-host:-webkit-full-screen :deep(.topology-scene) {
+  min-height: 0;
+  height: 100%;
+}
+
+.center-topology-card {
+  min-height: 220px;
+  height: clamp(220px, 34vh, 360px);
+  flex: 0 0 auto;
 }
 
 .center-topology-card :deep(.fui-card-body) {
@@ -322,6 +503,61 @@ onMounted(() => {
 
 .panel-right::-webkit-scrollbar-thumb {
   background: rgba(0, 229, 255, 0.24);
+}
+
+.topology-modal-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 10120;
+  background: rgba(3, 8, 18, 0.92);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.2rem;
+}
+
+.topology-modal-wrap {
+  width: min(1180px, 94vw);
+}
+
+.topology-modal-card {
+  height: min(82vh, 900px);
+  min-height: 520px;
+  border: 1px solid rgba(0, 229, 255, 0.3);
+  background: rgba(7, 15, 30, 0.95);
+}
+
+.topology-modal-card :deep(.n-card-header) {
+  border-bottom: 1px solid rgba(0, 229, 255, 0.2);
+  background: linear-gradient(90deg, rgba(0, 229, 255, 0.09), transparent 60%);
+}
+
+.topology-modal-card :deep(.n-card__content) {
+  min-height: 0;
+  height: calc(100% - 56px);
+  padding-top: 0.7rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.topology-modal-title {
+  font-family: var(--font-ui);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.11em;
+  color: var(--neon-cyan);
+}
+
+.topology-modal-content {
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.topology-modal-content :deep(.topology-scene) {
+  min-height: 0;
+  height: 100%;
 }
 
 .fui-modal-overlay {
@@ -472,7 +708,11 @@ onMounted(() => {
 
 @media (max-width: 1320px) {
   .soc-main {
-    grid-template-columns: minmax(220px, 250px) minmax(420px, 1fr) minmax(240px, 320px);
+    padding: 0.78rem;
+  }
+
+  .center-topology-card {
+    min-height: 208px;
   }
 }
 
@@ -481,27 +721,27 @@ onMounted(() => {
     grid-template-rows: 48px 1fr;
   }
 
-  .soc-main,
-  .soc-main.sidebar-collapsed {
-    grid-template-columns: 1fr;
-    gap: 0.7rem;
-    overflow-y: auto;
-  }
-
-  .panel-left,
-  .panel-right,
-  .panel-center {
-    min-height: auto;
+  .soc-main {
+    padding: 0.7rem;
   }
 
   .center-topology-card {
     flex: 0 0 auto;
-    min-height: 280px;
+    min-height: 260px;
   }
 
   .panel-right {
     overflow: visible;
     padding-right: 0;
+  }
+
+  .topology-modal-wrap {
+    width: min(980px, 96vw);
+  }
+
+  .topology-modal-card {
+    height: min(72vh, 760px);
+    min-height: 430px;
   }
 
   .modal-actions {
@@ -515,8 +755,7 @@ onMounted(() => {
 
 @media (max-width: 640px) {
   .soc-main {
-    padding: 0.6rem;
-    gap: 0.6rem;
+    padding: 0.56rem;
   }
 
   .topology-restore-btn {

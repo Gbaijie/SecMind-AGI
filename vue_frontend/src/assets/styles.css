@@ -47,7 +47,7 @@
   --border-active: rgba(0, 229, 255, 0.5);
 
   /* ── 字体 ────────────────────────────────────────── */
-  --font-ui: 'Rajdhani', 'Noto Sans SC', sans-serif;
+  --font-ui: 'HarmonyOS Sans SC', 'HarmonyOS Sans', 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', sans-serif;
   --font-brand: 'Orbitron', sans-serif;
   --font-mono: 'Roboto Mono', 'Consolas', monospace;
 

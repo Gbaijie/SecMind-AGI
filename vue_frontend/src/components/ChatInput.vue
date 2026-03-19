@@ -1,5 +1,5 @@
 <template>
-  <div class="terminal-input-shell" :class="{ 'terminal-input-shell--focused': isFocused }">
+  <NCard class="terminal-input-shell" :class="{ 'terminal-input-shell--focused': isFocused }" :bordered="false" embedded>
     <div class="terminal-controls">
       <div class="toggle-group">
         <label class="toggle-item" title="查询本地知识库">
@@ -27,38 +27,38 @@
       <div v-if="attachmentText" class="attachment-chip" title="附件将随本次消息发送">
         <PaperclipIcon class="toggle-icon" />
         <span class="attachment-name">{{ attachmentName }}</span>
-        <button class="chip-close" @click="removeAttachment" :disabled="loading" aria-label="移除附件">x</button>
+        <NButton class="chip-close" text :disabled="loading" aria-label="移除附件" @click="removeAttachment">x</NButton>
       </div>
     </div>
 
     <div v-if="isMultiAgentEnabled" class="multi-agent-config">
-        <div class="multi-agent-config__title">TACTICAL MODEL MATRIX</div>
-        <div class="multi-agent-provider">PROVIDER: {{ normalizedProvider.toUpperCase() }}</div>
-        <div class="multi-agent-config__grid">
-          <label class="agent-model-field">
-            <span class="agent-model-label">RAG MODEL</span>
-            <select v-model="multiAgentModels.rag" class="agent-model-select" :disabled="loading">
-              <option v-for="model in providerModelOptions" :key="`rag-${model}`" :value="model">{{ model }}</option>
-            </select>
-          </label>
+      <div class="multi-agent-config__title">TACTICAL MODEL MATRIX</div>
+      <div class="multi-agent-provider">PROVIDER: {{ normalizedProvider.toUpperCase() }}</div>
+      <div class="multi-agent-config__grid">
+        <label class="agent-model-field">
+          <span class="agent-model-label">RAG MODEL</span>
+          <select v-model="multiAgentModels.rag" class="agent-model-select" :disabled="loading">
+            <option v-for="model in providerModelOptions" :key="`rag-${model}`" :value="model">{{ model }}</option>
+          </select>
+        </label>
 
-          <label class="agent-model-field">
-            <span class="agent-model-label">WEB MODEL</span>
-            <select v-model="multiAgentModels.web" class="agent-model-select" :disabled="loading">
-              <option v-for="model in providerModelOptions" :key="`web-${model}`" :value="model">{{ model }}</option>
-            </select>
-          </label>
+        <label class="agent-model-field">
+          <span class="agent-model-label">WEB MODEL</span>
+          <select v-model="multiAgentModels.web" class="agent-model-select" :disabled="loading">
+            <option v-for="model in providerModelOptions" :key="`web-${model}`" :value="model">{{ model }}</option>
+          </select>
+        </label>
 
-          <label class="agent-model-field">
-            <span class="agent-model-label">SYNTHESIS MODEL</span>
-            <select v-model="multiAgentModels.synthesis" class="agent-model-select" :disabled="loading">
-              <option v-for="model in providerModelOptions" :key="`synthesis-${model}`" :value="model">{{ model }}</option>
-            </select>
-          </label>
-        </div>
+        <label class="agent-model-field">
+          <span class="agent-model-label">SYNTHESIS MODEL</span>
+          <select v-model="multiAgentModels.synthesis" class="agent-model-select" :disabled="loading">
+            <option v-for="model in providerModelOptions" :key="`synthesis-${model}`" :value="model">{{ model }}</option>
+          </select>
+        </label>
       </div>
+    </div>
 
-      <div class="input-stage">
+    <div class="input-stage">
       <input
         ref="fileInputRef"
         type="file"
@@ -67,37 +67,38 @@
         @change="onFileChange"
       />
 
-      <button class="stage-btn" @click="triggerFileSelect" :disabled="loading" title="上传文件">
+      <NButton class="stage-btn" quaternary circle @click="triggerFileSelect" :disabled="loading" title="上传文件">
         <PaperclipIcon class="stage-icon" />
-      </button>
+      </NButton>
 
       <div class="prompt-col">
         <span class="prompt-label">root@DeepSOC:~$</span>
       </div>
 
-      <textarea
+      <NInput
         ref="textareaRef"
-        v-model="message"
+        v-model:value="message"
         class="terminal-textarea"
+        type="textarea"
+        :autosize="{ minRows: 1, maxRows: 8 }"
         placeholder="输入诊断命令、日志片段或排障请求..."
-        @keyup.enter.exact.prevent="sendMessage"
-        @keyup.enter.shift.exact="addNewline"
-        @input="onInput"
+        :disabled="loading"
+        @keydown.enter.exact.prevent="sendMessage"
         @focus="setFocusState(true)"
         @blur="setFocusState(false)"
-        :disabled="loading"
-        rows="1"
-      ></textarea>
+      />
 
-      <button
+      <NButton
         class="stage-btn stage-btn--send"
+        quaternary
+        circle
         @click="sendMessage"
         :disabled="!message.trim() || loading"
         title="发送"
       >
         <span v-if="loading" class="loading-dot"></span>
         <SendIcon v-else class="stage-icon" />
-      </button>
+      </NButton>
     </div>
 
     <div class="wave-lane" aria-hidden="true" :class="{ 'is-active': isFocused || message.length > 0 }">
@@ -108,11 +109,12 @@
         :style="`--delay: ${index * 20}ms; --hue: ${185 + (index % 7)}`"
       ></span>
     </div>
-  </div>
+  </NCard>
 </template>
 
 <script setup>
-import { computed, defineEmits, defineExpose, defineProps, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, defineEmits, defineExpose, defineProps, nextTick, ref, watch } from 'vue'
+import { NButton, NCard, NInput } from 'naive-ui'
 import { useAppStore } from '../stores/appStore'
 import { BoltIcon, DatabaseIcon, PaperclipIcon, SendIcon, WorldIcon } from 'vue-tabler-icons'
 import { uploadFile as uploadFileApi } from '../api'
@@ -191,26 +193,8 @@ const useWebSearch = computed({
   set: (value) => appStore.setUseWebSearch(value),
 })
 
-onMounted(() => {
-  autoResize()
-})
-
 const setFocusState = (value) => {
   isFocused.value = value
-}
-
-const autoResize = () => {
-  const el = textareaRef.value
-  if (!el) return
-
-  requestAnimationFrame(() => {
-    el.style.height = 'auto'
-    el.style.height = `${Math.min(el.scrollHeight, 220)}px`
-  })
-}
-
-const onInput = () => {
-  autoResize()
 }
 
 const buildAgentConfigs = () => {
@@ -249,44 +233,21 @@ const sendMessage = () => {
   message.value = ''
   attachmentText.value = ''
   attachmentName.value = ''
-  nextTick(autoResize)
-}
-
-const addNewline = (event) => {
-  event.preventDefault()
-  const el = textareaRef.value
-  if (!el) return
-
-  const start = el.selectionStart
-  const end = el.selectionEnd
-
-  message.value = `${message.value.slice(0, start)}
-${message.value.slice(end)}`
-
-  nextTick(() => {
-    el.selectionStart = start + 1
-    el.selectionEnd = start + 1
-    autoResize()
-  })
 }
 
 const setContent = (content) => {
   message.value = content || ''
-  nextTick(autoResize)
 }
 
 const clearInput = () => {
   message.value = ''
-  nextTick(autoResize)
 }
 
 const focus = () => {
   nextTick(() => {
-    const el = textareaRef.value
-    if (!el) return
-    el.focus()
-    const end = el.value.length
-    el.setSelectionRange(end, end)
+    if (textareaRef.value && typeof textareaRef.value.focus === 'function') {
+      textareaRef.value.focus()
+    }
   })
 }
 
@@ -334,6 +295,10 @@ defineExpose({
   clip-path: polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px);
   box-shadow: inset 0 0 22px rgba(0, 229, 255, 0.05);
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.terminal-input-shell :deep(.n-card__content) {
+  padding: 0;
 }
 
 .terminal-input-shell--focused {
@@ -432,17 +397,12 @@ defineExpose({
 }
 
 .chip-close {
-  border: none;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-  line-height: 1;
+  min-width: 0;
+  height: auto;
   font-family: var(--font-mono);
   font-size: 0.75rem;
-  padding: 0 0.15rem;
-  text-transform: none;
-  letter-spacing: 0;
-  clip-path: none;
+  padding: 0;
+  color: inherit;
 }
 
 .multi-agent-config {
@@ -480,22 +440,6 @@ defineExpose({
   color: var(--text-secondary);
 }
 
-.agent-model-input {
-  border: 1px solid var(--border-dim);
-  background: rgba(2, 8, 22, 0.66);
-  color: var(--text-primary);
-  font-family: var(--font-mono);
-  font-size: 0.68rem;
-  padding: 0.28rem 0.4rem;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
-}
-
-.agent-model-input:focus {
-  outline: none;
-  border-color: rgba(0, 229, 255, 0.55);
-  box-shadow: 0 0 0 1px rgba(0, 229, 255, 0.15);
-}
-
 .input-stage {
   display: grid;
   grid-template-columns: auto auto 1fr auto;
@@ -517,53 +461,47 @@ defineExpose({
 }
 
 .terminal-textarea {
+  min-height: 1.45rem;
+}
+
+.terminal-textarea :deep(.n-input-wrapper) {
+  background: transparent;
+  box-shadow: none;
+  border: none;
+  padding: 0;
+}
+
+.terminal-textarea :deep(.n-input__textarea-el) {
   border: none;
   background: transparent;
   color: var(--text-primary);
   font-family: var(--font-mono);
   font-size: 0.85rem;
   line-height: 1.55;
-  max-height: 220px;
-  min-height: 1.45rem;
   resize: none;
-  overflow-y: auto;
   clip-path: none;
   padding: 0.26rem 0;
 }
 
-.terminal-textarea::placeholder {
+.terminal-textarea :deep(.n-input__textarea-el::placeholder) {
   color: var(--text-muted);
-  font-style: normal;
-}
-
-.terminal-textarea:focus {
-  outline: none;
-  box-shadow: none;
-  border: none;
 }
 
 .stage-btn {
   width: 2rem;
   height: 2rem;
-  border: 1px solid var(--border-dim);
-  background: rgba(0, 229, 255, 0.06);
-  color: var(--text-secondary);
   padding: 0;
-  clip-path: polygon(5px 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%, 0 5px);
-}
-
-.stage-btn:hover:not(:disabled) {
-  color: var(--neon-cyan);
-  border-color: rgba(0, 229, 255, 0.58);
-  background: rgba(0, 229, 255, 0.16);
-}
-
-.stage-btn:disabled {
-  opacity: 0.4;
+  --n-border: 1px solid var(--border-dim);
+  --n-color: rgba(0, 229, 255, 0.06);
+  --n-color-hover: rgba(0, 229, 255, 0.16);
+  --n-color-pressed: rgba(0, 229, 255, 0.22);
+  --n-text-color: var(--text-secondary);
+  --n-text-color-hover: var(--neon-cyan);
+  --n-text-color-pressed: var(--neon-cyan);
 }
 
 .stage-btn--send {
-  border-color: rgba(0, 229, 255, 0.45);
+  --n-border: 1px solid rgba(0, 229, 255, 0.45);
 }
 
 .stage-icon {
@@ -582,7 +520,9 @@ defineExpose({
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .wave-lane {
@@ -615,13 +555,23 @@ defineExpose({
 }
 
 @keyframes waveIdle {
-  0%, 100% { transform: scaleY(0.85); }
-  50% { transform: scaleY(1.15); }
+  0%,
+  100% {
+    transform: scaleY(0.85);
+  }
+  50% {
+    transform: scaleY(1.15);
+  }
 }
 
 @keyframes waveActive {
-  0%, 100% { transform: scaleY(1); }
-  50% { transform: scaleY(4.5); }
+  0%,
+  100% {
+    transform: scaleY(1);
+  }
+  50% {
+    transform: scaleY(4.5);
+  }
 }
 
 @media (max-width: 900px) {

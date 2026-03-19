@@ -48,12 +48,30 @@ export function useChatSession({ apiClient, messagesContainerRef, chatInputRef }
     return sessions.value.filter((sessionId) => sessionId.toLowerCase().includes(query))
   })
 
+  const resolveScrollContainer = (scrollbar) => {
+    const candidate =
+      scrollbar?.containerRef ||
+      (scrollbar?.$el && scrollbar.$el.querySelector('.n-scrollbar-container')) ||
+      scrollbar
+
+    if (!candidate) return null
+    return candidate?.value || candidate
+  }
+
   const scrollToBottom = async () => {
     await nextTick()
-    const container = messagesContainerRef.value
-    if (container) {
-      container.scrollTop = container.scrollHeight
+    const scrollbar = messagesContainerRef.value
+    const container = resolveScrollContainer(scrollbar)
+
+    if (!container) return
+
+    const top = container.scrollHeight
+    if (scrollbar && typeof scrollbar.scrollTo === 'function') {
+      scrollbar.scrollTo({ top, behavior: 'auto' })
+      return
     }
+
+    container.scrollTop = top
   }
 
   const loadHistory = async (sessionId) => {

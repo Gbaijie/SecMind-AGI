@@ -16,45 +16,47 @@
         <AlertIcon class="btn-icon" /> {{ error }}
       </div>
 
-      <div class="messages-viewport" :ref="messagesContainerRef">
-        <div v-if="messages.length === 0" class="terminal-empty">
-          <div class="terminal-empty-art">
-            <svg height="4em" viewBox="0 0 24 24" width="4em" xmlns="http://www.w3.org/2000/svg">
-              <path
-                d="M23.748 4.482c-.254-.124-.364.113-.512.234-.051.039-.094.09-.137.136-.372.397-.806.657-1.373.626-.829-.046-1.537.214-2.163.848-.133-.782-.575-1.248-1.247-1.548-.352-.156-.708-.311-.955-.65-.172-.241-.219-.51-.305-.774-.055-.16-.11-.323-.293-.35-.2-.031-.278.136-.356.276-.313.572-.434 1.202-.422 1.84.027 1.436.633 2.58 1.838 3.393.137.093.172.187.129.323-.082.28-.18.552-.266.833-.055.179-.137.217-.329.14a5.526 5.526 0 01-1.736-1.18c-.857-.828-1.631-1.742-2.597-2.458a11.365 11.365 0 00-.689-.471c-.985-.957.13-1.743.388-1.836.27-.098.093-.432-.779-.428-.872.004-1.67.295-2.687.684a3.055 3.055 0 01-.465.137 9.597 9.597 0 00-2.883-.102c-1.885.21-3.39 1.102-4.497 2.623C.082 8.606-.231 10.684.152 12.85c.403 2.284 1.569 4.175 3.36 5.653 1.858 1.533 3.997 2.284 6.438 2.14 1.482-.085 3.133-.284 4.994-1.86.47.234.962.327 1.78.397.63.059 1.236-.03 1.705-.128.735-.156.684-.837.419-.961-2.155-1.004-1.682-.595-2.113-.926 1.096-1.296 2.746-2.642 3.392-7.003.05-.347.007-.565 0-.845-.004-.17.035-.237.23-.256a4.173 4.173 0 001.545-.475c1.396-.763 1.96-2.015 2.093-3.517.02-.23-.004-.467-.247-.588z"
-                fill="#00E5FF"
-              />
-            </svg>
+      <NScrollbar class="messages-viewport" :ref="messagesContainerRef">
+        <div class="messages-viewport-inner">
+          <div v-if="isEmptyState" class="terminal-empty">
+            <div class="terminal-empty-art">
+              <svg height="4em" viewBox="0 0 24 24" width="4em" xmlns="http://www.w3.org/2000/svg">
+                <path
+                  d="M23.748 4.482c-.254-.124-.364.113-.512.234-.051.039-.094.09-.137.136-.372.397-.806.657-1.373.626-.829-.046-1.537.214-2.163.848-.133-.782-.575-1.248-1.247-1.548-.352-.156-.708-.311-.955-.65-.172-.241-.219-.51-.305-.774-.055-.16-.11-.323-.293-.35-.2-.031-.278.136-.356.276-.313.572-.434 1.202-.422 1.84.027 1.436.633 2.58 1.838 3.393.137.093.172.187.129.323-.082.28-.18.552-.266.833-.055.179-.137.217-.329.14a5.526 5.526 0 01-1.736-1.18c-.857-.828-1.631-1.742-2.597-2.458a11.365 11.365 0 00-.689-.471c-.985-.957.13-1.743.388-1.836.27-.098.093-.432-.779-.428-.872.004-1.67.295-2.687.684a3.055 3.055 0 01-.465.137 9.597 9.597 0 00-2.883-.102c-1.885.21-3.39 1.102-4.497 2.623C.082 8.606-.231 10.684.152 12.85c.403 2.284 1.569 4.175 3.36 5.653 1.858 1.533 3.997 2.284 6.438 2.14 1.482-.085 3.133-.284 4.994-1.86.47.234.962.327 1.78.397.63.059 1.236-.03 1.705-.128.735-.156.684-.837.419-.961-2.155-1.004-1.682-.595-2.113-.926 1.096-1.296 2.746-2.642 3.392-7.003.05-.347.007-.565 0-.845-.004-.17.035-.237.23-.256a4.173 4.173 0 001.545-.475c1.396-.763 1.96-2.015 2.093-3.517.02-.23-.004-.467-.247-.588z"
+                  fill="#00E5FF"
+                />
+              </svg>
+            </div>
+            <p class="terminal-empty-text"><span class="prompt-prefix">root@DeepSOC:~$</span>&nbsp;_</p>
+            <p class="terminal-empty-hint">awaiting tactical input...</p>
           </div>
-          <p class="terminal-empty-text"><span class="prompt-prefix">root@DeepSOC:~$</span>&nbsp;_</p>
-          <p class="terminal-empty-hint">awaiting tactical input...</p>
-        </div>
 
-        <ChatMessage
-          v-for="(msg, index) in messages"
-          :key="msg.id"
-          :is-user="msg.isUser"
-          :content="msg.content"
-          :attachment-name="msg.attachmentName"
-          :think-process="msg.think_process"
-          :duration="msg.duration"
-          :timestamp="msg.timestamp"
-          :message-id="msg.id"
-          :is-multi-agent="msg.isMultiAgent"
-          :agent-data="msg.agentData"
-          :allow-regenerate="!msg.isUser && index === messages.length - 1 && !loading"
-          @regenerate="onRegenerate"
-          @edit="onEditMessage"
-        />
+          <ChatMessage
+            v-for="(msg, index) in displayMessages"
+            :key="msg.id"
+            :is-user="msg.isUser"
+            :content="msg.content"
+            :attachment-name="msg.attachmentName"
+            :think-process="msg.think_process"
+            :duration="msg.duration"
+            :timestamp="msg.timestamp"
+            :message-id="msg.id"
+            :is-multi-agent="msg.isMultiAgent"
+            :agent-data="msg.agentData"
+            :allow-regenerate="!msg.isUser && index === displayMessages.length - 1 && !loading"
+            @regenerate="onRegenerate"
+            @edit="onEditMessage"
+          />
 
-        <div
-          v-if="loading && messages.length > 0 && !messages[messages.length - 1].isUser && !messages[messages.length - 1].content && !messages[messages.length - 1].think_process"
-          class="terminal-loading"
-        >
-          <span class="loading-cursor">█</span>
-          <span class="loading-text">ANALYZING...</span>
+          <div
+            v-if="loading && lastDisplayMessage && !lastDisplayMessage.isUser && !lastDisplayMessage.content && !lastDisplayMessage.think_process"
+            class="terminal-loading"
+          >
+            <span class="loading-cursor">█</span>
+            <span class="loading-text">ANALYZING...</span>
+          </div>
         </div>
-      </div>
+      </NScrollbar>
 
       <div class="terminal-input-zone">
         <ChatInput :ref="chatInputRef" :loading="loading" @send="onSendMessage" />
@@ -64,12 +66,14 @@
 </template>
 
 <script setup>
+import { computed, toRefs } from 'vue'
+import { NScrollbar } from 'naive-ui'
 import FuiCard from '../components/FuiCard.vue'
 import ChatMessage from '../components/ChatMessage.vue'
 import ChatInput from '../components/ChatInput.vue'
 import { AlertTriangleIcon as AlertIcon } from 'vue-tabler-icons'
 
-defineProps({
+const props = defineProps({
   currentSession: { type: String, default: '' },
   messages: { type: Array, default: () => [] },
   loading: { type: Boolean, default: false },
@@ -79,6 +83,40 @@ defineProps({
   onEditMessage: { type: Function, required: true },
   messagesContainerRef: { type: Object, default: null },
   chatInputRef: { type: Object, default: null },
+})
+
+const {
+  currentSession,
+  messages,
+  loading,
+  error,
+  onSendMessage,
+  onRegenerate,
+  onEditMessage,
+  messagesContainerRef,
+  chatInputRef,
+} = toRefs(props)
+
+const hasRenderablePayload = (message) => {
+  if (!message || typeof message !== 'object') return false
+
+  const text = (message.content || '').trim()
+  const thinking = (message.think_process || '').trim()
+  const attachment = (message.attachmentName || '').trim()
+
+  if (text || thinking || attachment) return true
+  if (message.isUser) return true
+
+  return false
+}
+
+const displayMessages = computed(() => (messages.value || []).filter((message) => hasRenderablePayload(message)))
+
+const isEmptyState = computed(() => displayMessages.value.length === 0)
+
+const lastDisplayMessage = computed(() => {
+  if (displayMessages.value.length === 0) return null
+  return displayMessages.value[displayMessages.value.length - 1]
 })
 </script>
 
@@ -176,19 +214,26 @@ defineProps({
 .messages-viewport {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 0.1rem;
+}
+
+.messages-viewport :deep(.n-scrollbar-container) {
   padding: 0.35rem 0.2rem 0.35rem 0;
 }
 
-.messages-viewport::-webkit-scrollbar {
-  width: 4px;
+.messages-viewport :deep(.n-scrollbar-rail.n-scrollbar-rail--vertical) {
+  width: 6px;
+  right: 0;
 }
 
-.messages-viewport::-webkit-scrollbar-thumb {
-  background: rgba(0, 229, 255, 0.3);
+.messages-viewport :deep(.n-scrollbar-rail__scrollbar) {
+  background: rgba(0, 229, 255, 0.35);
+}
+
+.messages-viewport-inner {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
 }
 
 .terminal-empty {

@@ -25,6 +25,12 @@ let activeLinkIndex = 0
 let linkVectors = []
 let particleT = 0
 let resizeObserver = null
+let resizeThrottleTimer = null
+let resizeDebounceTimer = null
+let lastResizeTime = 0
+
+const RESIZE_THROTTLE_MS = 90
+const RESIZE_DEBOUNCE_MS = 180
 
 const severityColor = {
   high: 0xff0055,
@@ -44,14 +50,22 @@ const ensureVector = (node, idx, total) => {
 
 const clearNetworkGroup = () => {
   if (!networkGroup) return
+
   while (networkGroup.children.length) {
-    const child = networkGroup.children.pop()
+    const child = networkGroup.children[networkGroup.children.length - 1]
+    networkGroup.remove(child)
+
     if (child.geometry) child.geometry.dispose()
     if (child.material) {
-      if (Array.isArray(child.material)) child.material.forEach((mat) => mat.dispose())
-      else child.material.dispose()
+      if (Array.isArray(child.material)) {
+        child.material.forEach((mat) => mat.dispose())
+      } else {
+        child.material.dispose()
+      }
     }
   }
+
+  pulseNode = null
   linkVectors = []
   activeLinkIndex = 0
   particleT = 0
@@ -131,9 +145,14 @@ const buildNetwork = () => {
     const to = nodeMap.get(link.target)
     if (!from || !to) return
 
-    const geometry = new THREE.BufferGeometry().setFromPoints([from, to])
+    const points = [from, to]
+    const geometry = new THREE.BufferGeometry().setFromPoints(points)
     const color = severityColor[link.severity] || 0x00e5ff
-    const material = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.6 })
+    const material = new THREE.LineBasicMaterial({
+      color,
+      transparent: true,
+      opacity: 0.6,
+    })
 
     const line = new THREE.Line(geometry, material)
     networkGroup.add(line)
@@ -158,32 +177,69 @@ const resizeRenderer = () => {
 
   const width = mountRef.value.clientWidth
   const height = mountRef.value.clientHeight
+  if (!width || !height) return
 
   camera.aspect = width / Math.max(height, 1)
   camera.updateProjectionMatrix()
-  renderer.setSize(width, height)
+  renderer.setSize(width, height, false)
+}
+
+const clearResizeTimers = () => {
+  if (resizeThrottleTimer) {
+    clearTimeout(resizeThrottleTimer)
+    resizeThrottleTimer = null
+  }
+  if (resizeDebounceTimer) {
+    clearTimeout(resizeDebounceTimer)
+    resizeDebounceTimer = null
+  }
+}
+
+const scheduleResize = () => {
+  const now = Date.now()
+  const elapsed = now - lastResizeTime
+
+  if (elapsed >= RESIZE_THROTTLE_MS) {
+    lastResizeTime = now
+    resizeRenderer()
+  } else if (!resizeThrottleTimer) {
+    resizeThrottleTimer = setTimeout(() => {
+      resizeThrottleTimer = null
+      lastResizeTime = Date.now()
+      resizeRenderer()
+    }, RESIZE_THROTTLE_MS - elapsed)
+  }
+
+  if (resizeDebounceTimer) {
+    clearTimeout(resizeDebounceTimer)
+  }
+  resizeDebounceTimer = setTimeout(() => {
+    resizeDebounceTimer = null
+    lastResizeTime = Date.now()
+    resizeRenderer()
+  }, RESIZE_DEBOUNCE_MS)
 }
 
 const animate = () => {
   frameId = requestAnimationFrame(animate)
 
   if (networkGroup) {
-    networkGroup.rotation.y += 0.004
-    networkGroup.rotation.x = Math.sin(Date.now() * 0.0005) * 0.08
+    networkGroup.rotation.y += 0.0028
+    networkGroup.rotation.x = Math.sin(Date.now() * 0.00026) * 0.08
   }
 
   if (pulseNode && linkVectors.length > 0) {
     const activeLink = linkVectors[activeLinkIndex % linkVectors.length]
     pulseNode.material.color.setHex(activeLink.color)
 
-    particleT += 0.03
+    particleT += 0.014
     if (particleT >= 1) {
       particleT = 0
       activeLinkIndex += 1
     }
 
     pulseNode.position.lerpVectors(activeLink.from, activeLink.to, particleT)
-    const pulse = 0.6 + Math.sin(Date.now() * 0.025) * 0.18
+    const pulse = 0.6 + Math.sin(Date.now() * 0.012) * 0.18
     pulseNode.scale.setScalar(pulse)
   }
 
@@ -199,7 +255,10 @@ onMounted(() => {
   camera = new THREE.PerspectiveCamera(52, 1, 0.1, 300)
   camera.position.set(0, 8, 58)
 
-  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
+  renderer = new THREE.WebGLRenderer({
+    antialias: true,
+    alpha: true,
+  })
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
   renderer.setClearColor(0x050814, 0)
 
@@ -239,13 +298,13 @@ onMounted(() => {
   scene.add(networkGroup)
 
   buildNetwork()
-  resizeRenderer()
 
   resizeObserver = new ResizeObserver(() => {
-    resizeRenderer()
+    scheduleResize()
   })
   resizeObserver.observe(mountRef.value)
-  
+  scheduleResize()
+
   animate()
 })
 
@@ -253,7 +312,8 @@ watch(
   () => props.topology,
   () => {
     buildNetwork()
-  }
+  },
+  { deep: true }
 )
 
 onBeforeUnmount(() => {
@@ -261,8 +321,10 @@ onBeforeUnmount(() => {
     resizeObserver.disconnect()
     resizeObserver = null
   }
+  clearResizeTimers()
 
   if (frameId) cancelAnimationFrame(frameId)
+
   clearNetworkGroup()
 
   if (renderer) {

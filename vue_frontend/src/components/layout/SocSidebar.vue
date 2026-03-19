@@ -1,49 +1,52 @@
 <template>
   <FuiCard title="TACTICAL SESSIONS" class="session-card">
     <template #actions>
-      <button class="fui-icon-btn" @click="$emit('create-session', `新会话 ${Date.now()}`)" title="新建会话">
+      <NButton class="fui-icon-btn" quaternary circle @click="$emit('create-session', `新会话 ${Date.now()}`)" title="新建会话">
         <PlusIcon class="btn-icon" />
-      </button>
+      </NButton>
     </template>
 
-    <div class="session-search">
-      <SearchIcon class="search-icon-sm" />
-      <input
-        :value="searchQuery"
-        type="text"
-        placeholder="SEARCH SESSION..."
-        class="session-search-input"
-        @input="$emit('update:search-query', $event.target.value)"
-      />
-    </div>
+    <NInput
+      :value="searchQuery"
+      placeholder="SEARCH SESSION..."
+      class="session-search-input"
+      @update:value="$emit('update:search-query', $event)"
+    >
+      <template #prefix>
+        <SearchIcon class="search-icon-sm" />
+      </template>
+    </NInput>
 
-    <div class="session-items">
-      <div
-        v-for="session in filteredSessions"
-        :key="session"
-        class="session-item"
-        :class="{ 'session-item--active': session === currentSession }"
-        @click="$emit('select-session', session)"
-      >
-        <TerminalIcon class="session-icon" />
-        <span class="session-item-name">{{ session }}</span>
-        <button class="fui-icon-btn session-del" @click.stop="$emit('delete-session', session)" title="删除">
-          <TrashIcon class="btn-icon" />
-        </button>
+    <NScrollbar class="session-scroll">
+      <div class="session-items">
+        <div
+          v-for="session in filteredSessions"
+          :key="session"
+          class="session-item"
+          :class="{ 'session-item--active': session === currentSession }"
+          @click="$emit('select-session', session)"
+        >
+          <TerminalIcon class="session-icon" />
+          <span class="session-item-name">{{ session }}</span>
+          <NButton class="fui-icon-btn session-del" quaternary circle @click.stop="$emit('delete-session', session)" title="删除">
+            <TrashIcon class="btn-icon" />
+          </NButton>
+        </div>
+        <div v-if="filteredSessions.length === 0" class="session-empty">NO SESSIONS FOUND</div>
       </div>
-      <div v-if="filteredSessions.length === 0" class="session-empty">NO SESSIONS FOUND</div>
-    </div>
+    </NScrollbar>
 
     <div class="panel-footer">
-      <button class="fui-footer-btn" @click="$emit('clear-history')">
+      <NButton class="fui-footer-btn" quaternary @click="$emit('clear-history')">
         <TrashIcon class="btn-icon" />
         CLEAR SESSION
-      </button>
+      </NButton>
     </div>
   </FuiCard>
 </template>
 
 <script setup>
+import { NButton, NInput, NScrollbar } from 'naive-ui'
 import FuiCard from '../FuiCard.vue'
 import { PlusIcon, SearchIcon, TerminalIcon, TrashIcon } from 'vue-tabler-icons'
 
@@ -75,58 +78,61 @@ defineEmits([
   flex-direction: column;
 }
 
-.session-search {
-  position: relative;
-  margin-bottom: 0.7rem;
-}
-
 .search-icon-sm {
-  position: absolute;
-  left: 0.6rem;
-  top: 50%;
-  transform: translateY(-50%);
   width: 14px;
   height: 14px;
   color: #6e9ab0;
 }
 
 .session-search-input {
-  width: 100%;
-  height: 32px;
-  padding: 0 0.6rem 0 1.9rem;
-  background: rgba(3, 10, 24, 0.7);
+  margin-bottom: 0.7rem;
+}
+
+.session-search-input :deep(.n-input-wrapper) {
+  min-height: 32px;
+  background: rgba(3, 10, 24, 0.78);
   border: 1px solid rgba(0, 229, 255, 0.2);
-  color: var(--text-main);
+  box-shadow: none;
+}
+
+.session-search-input :deep(.n-input__input-el) {
   font-family: var(--font-mono);
   font-size: 0.7rem;
   letter-spacing: 0.06em;
+  color: var(--text-main);
 }
 
-.session-search-input::placeholder {
+.session-search-input :deep(.n-input__placeholder) {
   color: #628296;
 }
 
-.session-search-input:focus {
-  outline: none;
+.session-search-input :deep(.n-input-wrapper:hover),
+.session-search-input :deep(.n-input-wrapper.n-input-wrapper--focus) {
   border-color: rgba(0, 229, 255, 0.5);
 }
 
-.session-items {
+.session-scroll {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 0.45rem;
+}
+
+.session-scroll :deep(.n-scrollbar-container) {
   padding-right: 0.25rem;
 }
 
-.session-items::-webkit-scrollbar {
-  width: 4px;
+.session-scroll :deep(.n-scrollbar-rail.n-scrollbar-rail--vertical) {
+  width: 5px;
 }
 
-.session-items::-webkit-scrollbar-thumb {
-  background: rgba(0, 229, 255, 0.3);
+.session-scroll :deep(.n-scrollbar-rail__scrollbar) {
+  background: rgba(0, 229, 255, 0.35);
+}
+
+.session-items {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
 }
 
 .session-item {

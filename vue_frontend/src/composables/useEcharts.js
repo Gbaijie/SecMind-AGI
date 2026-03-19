@@ -1,10 +1,17 @@
 import * as echarts from 'echarts'
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
-export function useEcharts(buildOption, watchSource, { deep = true } = {}) {
+export function useEcharts(
+  buildOption,
+  watchSource,
+  { deep = true, throttleMs = 80, debounceMs = 160 } = {}
+) {
   const chartRef = ref(null)
   let chart = null
   let resizeObserver = null
+  let resizeThrottleTimer = null
+  let resizeDebounceTimer = null
+  let lastResizeTime = 0
 
   const renderChart = () => {
     if (!chart) return
@@ -17,17 +24,53 @@ export function useEcharts(buildOption, watchSource, { deep = true } = {}) {
     }
   }
 
+  const clearResizeTimers = () => {
+    if (resizeThrottleTimer) {
+      clearTimeout(resizeThrottleTimer)
+      resizeThrottleTimer = null
+    }
+    if (resizeDebounceTimer) {
+      clearTimeout(resizeDebounceTimer)
+      resizeDebounceTimer = null
+    }
+  }
+
+  const scheduleResize = () => {
+    const now = Date.now()
+    const elapsed = now - lastResizeTime
+
+    if (elapsed >= throttleMs) {
+      lastResizeTime = now
+      resizeChart()
+    } else if (!resizeThrottleTimer) {
+      resizeThrottleTimer = setTimeout(() => {
+        resizeThrottleTimer = null
+        lastResizeTime = Date.now()
+        resizeChart()
+      }, throttleMs - elapsed)
+    }
+
+    if (resizeDebounceTimer) {
+      clearTimeout(resizeDebounceTimer)
+    }
+    resizeDebounceTimer = setTimeout(() => {
+      resizeDebounceTimer = null
+      lastResizeTime = Date.now()
+      resizeChart()
+    }, debounceMs)
+  }
+
   onMounted(() => {
     if (!chartRef.value) return
 
     chart = echarts.init(chartRef.value)
     renderChart()
 
-    // 核心修改：使用 ResizeObserver 监听当前 DOM 容器的尺寸变化
     resizeObserver = new ResizeObserver(() => {
-      resizeChart()
+      scheduleResize()
     })
     resizeObserver.observe(chartRef.value)
+    scheduleResize()
   })
 
   if (watchSource) {
@@ -39,6 +82,7 @@ export function useEcharts(buildOption, watchSource, { deep = true } = {}) {
       resizeObserver.disconnect()
       resizeObserver = null
     }
+    clearResizeTimers()
     if (chart) {
       chart.dispose()
       chart = null
@@ -48,5 +92,6 @@ export function useEcharts(buildOption, watchSource, { deep = true } = {}) {
   return {
     chartRef,
     renderChart,
+    resizeChart,
   }
 }

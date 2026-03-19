@@ -3,23 +3,22 @@ import { ref } from 'vue';
 
 const DEFAULT_SESSION = '默认对话';
 
+const createDefaultAgentNode = () => ({
+  status: 'idle',
+  content: '',
+  error: '',
+  errorDetail: null,
+});
+
 const createDefaultAgentData = () => ({
-  rag: { status: 'idle', content: '' },
-  web: { status: 'idle', content: '' },
+  rag: createDefaultAgentNode(),
+  web: createDefaultAgentNode(),
 });
 
 export const useChatStore = defineStore('chat', () => {
   const currentSession = ref(localStorage.getItem('currentSession') || DEFAULT_SESSION);
   const sessions = ref(JSON.parse(localStorage.getItem('sessions') || '["默认对话"]'));
   const messages = ref({});
-
-  const isMultiAgentMode = ref(false);
-
-  const agentConfigs = ref({
-    ragAgent: { model: 'deepseek-chat', enabled: true },
-    webAgent: { model: 'gpt-3.5-turbo', enabled: true },
-    synthesisAgent: { model: 'deepseek-reasoner' }
-  });
 
   const persistSessions = () => {
     localStorage.setItem('sessions', JSON.stringify(sessions.value));
@@ -88,10 +87,10 @@ export const useChatStore = defineStore('chat', () => {
       message.agentData = createDefaultAgentData();
     }
     if (!message.agentData.rag) {
-      message.agentData.rag = { status: 'idle', content: '' };
+      message.agentData.rag = createDefaultAgentNode();
     }
     if (!message.agentData.web) {
-      message.agentData.web = { status: 'idle', content: '' };
+      message.agentData.web = createDefaultAgentNode();
     }
   };
 
@@ -111,7 +110,7 @@ export const useChatStore = defineStore('chat', () => {
     message.agentData[agentId].content += chunk;
   };
 
-  const updateAgentStatus = (sessionId, messageId, agentId, status) => {
+  const updateAgentStatus = (sessionId, messageId, agentId, status, error = '', errorDetail = null) => {
     const message = findMessageById(sessionId, messageId);
     if (!message || message.isUser || !status) return;
 
@@ -120,6 +119,15 @@ export const useChatStore = defineStore('chat', () => {
 
     ensureAgentData(message);
     message.agentData[agentId].status = status;
+
+    if (status === 'error') {
+      message.agentData[agentId].error = error || '';
+      message.agentData[agentId].errorDetail = errorDetail || null;
+      return;
+    }
+
+    message.agentData[agentId].error = '';
+    message.agentData[agentId].errorDetail = null;
   };
 
   const updateLastMessage = (sessionId, payload) => {
@@ -235,8 +243,6 @@ export const useChatStore = defineStore('chat', () => {
     currentSession,
     sessions,
     messages,
-    isMultiAgentMode,
-    agentConfigs,
     persistSessions,
     persistCurrentSession,
     addSession,

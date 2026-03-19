@@ -32,44 +32,33 @@
     </div>
 
     <div v-if="isMultiAgentEnabled" class="multi-agent-config">
-      <div class="multi-agent-config__title">TACTICAL MODEL MATRIX</div>
-      <div class="multi-agent-config__grid">
-        <label class="agent-model-field">
-          <span class="agent-model-label">RAG MODEL</span>
-          <input
-            v-model="multiAgentModels.rag"
-            class="agent-model-input"
-            type="text"
-            placeholder="deepseek-chat"
-            :disabled="loading"
-          />
-        </label>
+        <div class="multi-agent-config__title">TACTICAL MODEL MATRIX</div>
+        <div class="multi-agent-provider">PROVIDER: {{ normalizedProvider.toUpperCase() }}</div>
+        <div class="multi-agent-config__grid">
+          <label class="agent-model-field">
+            <span class="agent-model-label">RAG MODEL</span>
+            <select v-model="multiAgentModels.rag" class="agent-model-select" :disabled="loading">
+              <option v-for="model in providerModelOptions" :key="`rag-${model}`" :value="model">{{ model }}</option>
+            </select>
+          </label>
 
-        <label class="agent-model-field">
-          <span class="agent-model-label">WEB MODEL</span>
-          <input
-            v-model="multiAgentModels.web"
-            class="agent-model-input"
-            type="text"
-            placeholder="gpt-4o-mini"
-            :disabled="loading"
-          />
-        </label>
+          <label class="agent-model-field">
+            <span class="agent-model-label">WEB MODEL</span>
+            <select v-model="multiAgentModels.web" class="agent-model-select" :disabled="loading">
+              <option v-for="model in providerModelOptions" :key="`web-${model}`" :value="model">{{ model }}</option>
+            </select>
+          </label>
 
-        <label class="agent-model-field">
-          <span class="agent-model-label">SYNTHESIS MODEL</span>
-          <input
-            v-model="multiAgentModels.synthesis"
-            class="agent-model-input"
-            type="text"
-            placeholder="deepseek-reasoner"
-            :disabled="loading"
-          />
-        </label>
+          <label class="agent-model-field">
+            <span class="agent-model-label">SYNTHESIS MODEL</span>
+            <select v-model="multiAgentModels.synthesis" class="agent-model-select" :disabled="loading">
+              <option v-for="model in providerModelOptions" :key="`synthesis-${model}`" :value="model">{{ model }}</option>
+            </select>
+          </label>
+        </div>
       </div>
-    </div>
 
-    <div class="input-stage">
+      <div class="input-stage">
       <input
         ref="fileInputRef"
         type="file"
@@ -123,7 +112,7 @@
 </template>
 
 <script setup>
-import { computed, defineEmits, defineExpose, defineProps, nextTick, onMounted, ref } from 'vue'
+import { computed, defineEmits, defineExpose, defineProps, nextTick, onMounted, ref, watch } from 'vue'
 import { useAppStore } from '../stores/appStore'
 import { BoltIcon, DatabaseIcon, PaperclipIcon, SendIcon, WorldIcon } from 'vue-tabler-icons'
 import { uploadFile as uploadFileApi } from '../api'
@@ -138,6 +127,14 @@ const props = defineProps({
 const emit = defineEmits(['send'])
 
 const appStore = useAppStore()
+const PROVIDER_MODEL_CANDIDATES = {
+  ollama: ['DeepSeek-R1:7b', 'Qwen3:8b', 'Llama3:8b'],
+  openai: ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1-mini'],
+  deepseek: ['deepseek-chat', 'deepseek-reasoner'],
+  minimax: ['MiniMax-M2.5'],
+  siliconflow: ['DeepSeek-V3.2', 'DeepSeek-R1', 'Qwen2.5-72B'],
+}
+
 const message = ref('')
 const textareaRef = ref(null)
 const fileInputRef = ref(null)
@@ -145,11 +142,44 @@ const isFocused = ref(false)
 const attachmentText = ref('')
 const attachmentName = ref('')
 const isMultiAgentEnabled = ref(false)
-const multiAgentModels = ref({
-  rag: 'deepseek-chat',
-  web: 'gpt-4o-mini',
-  synthesis: 'deepseek-reasoner',
+
+const normalizedProvider = computed(() => (appStore.llmProvider || 'ollama').trim().toLowerCase())
+
+const providerModelOptions = computed(() => {
+  const options = PROVIDER_MODEL_CANDIDATES[normalizedProvider.value]
+  if (Array.isArray(options) && options.length > 0) {
+    return options
+  }
+  return [appStore.llmModel || 'DeepSeek-R1:7b']
 })
+
+const resolvePreferredModel = () => {
+  const preferred = (appStore.llmModel || '').trim()
+  if (preferred && providerModelOptions.value.includes(preferred)) {
+    return preferred
+  }
+  return providerModelOptions.value[0] || 'DeepSeek-R1:7b'
+}
+
+const multiAgentModels = ref({
+  rag: resolvePreferredModel(),
+  web: resolvePreferredModel(),
+  synthesis: resolvePreferredModel(),
+})
+
+watch(
+  [normalizedProvider, () => appStore.llmModel],
+  () => {
+    const fallback = resolvePreferredModel()
+    for (const key of ['rag', 'web', 'synthesis']) {
+      const current = (multiAgentModels.value[key] || '').trim()
+      if (!current || !providerModelOptions.value.includes(current)) {
+        multiAgentModels.value[key] = fallback
+      }
+    }
+  },
+  { immediate: true }
+)
 
 const useDbSearch = computed({
   get: () => appStore.useDbSearch,
@@ -183,11 +213,26 @@ const onInput = () => {
   autoResize()
 }
 
-const buildAgentConfigs = () => ({
-  rag: { model: (multiAgentModels.value.rag || 'deepseek-chat').trim() },
-  web: { model: (multiAgentModels.value.web || 'gpt-4o-mini').trim() },
-  synthesis: { model: (multiAgentModels.value.synthesis || 'deepseek-reasoner').trim() },
-})
+const buildAgentConfigs = () => {
+  const provider = normalizedProvider.value
+  const providerApiKey = (appStore.providerApiKey || '').trim()
+  const fallbackModel = resolvePreferredModel()
+
+  const buildConfig = (modelValue) => {
+    const model = (modelValue || fallbackModel).trim() || fallbackModel
+    return {
+      provider,
+      model,
+      provider_api_key: providerApiKey || undefined,
+    }
+  }
+
+  return {
+    rag: buildConfig(multiAgentModels.value.rag),
+    web: buildConfig(multiAgentModels.value.web),
+    synthesis: buildConfig(multiAgentModels.value.synthesis),
+  }
+}
 
 const sendMessage = () => {
   const content = message.value.trim()
@@ -215,7 +260,8 @@ const addNewline = (event) => {
   const start = el.selectionStart
   const end = el.selectionEnd
 
-  message.value = `${message.value.slice(0, start)}\n${message.value.slice(end)}`
+  message.value = `${message.value.slice(0, start)}
+${message.value.slice(end)}`
 
   nextTick(() => {
     el.selectionStart = start + 1
@@ -346,6 +392,24 @@ defineExpose({
 .toggle-icon {
   width: 0.78rem;
   height: 0.78rem;
+}
+
+.multi-agent-provider {
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  color: #7ba7bc;
+  letter-spacing: 0.08em;
+  margin-bottom: 0.45rem;
+}
+
+.agent-model-select {
+  width: 100%;
+  border: 1px solid var(--border-dim);
+  background: rgba(2, 8, 22, 0.85);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+  padding: 0.35rem 0.45rem;
 }
 
 .attachment-chip {

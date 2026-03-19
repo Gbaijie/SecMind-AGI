@@ -5,7 +5,7 @@ DeepSOC 是一个面向网络安全日志分析场景的 SOC (Security Operation
 - 后端：`Django + django-ninja + ChromaDB + Ollama/OpenAI-compatible LLM`
 - 前端：`Vue 3 + Pinia + ECharts + Three.js`
 
-当前版本聚焦“最小可用演示链路 (MVP)”：已打通登录、会话、流式问答、日志检索、联网检索开关、统计面板与拓扑可视化，但多智能体编排和高真实性可视化仍处于后续迭代阶段。
+当前版本聚焦“最小可用演示链路 (MVP)”：已打通登录、会话、流式问答、日志检索、联网检索开关、统计面板与拓扑可视化，并已实现可配置的多智能体编排链路。
 
 ---
 
@@ -29,6 +29,8 @@ DeepSOC 是一个面向网络安全日志分析场景的 SOC (Security Operation
 - 文件上传解析：支持 `.txt`、`.docx`、`.xlsx`。
 - 本地日志检索 + 可选联网检索（DuckDuckGo via `ddgs`）。
 - 多 provider 模型路由：`ollama/openai/deepseek/minimax/siliconflow`。
+- 多智能体编排：`RAG Agent + Web Agent` 并行分析，`Synthesis Agent` 汇总输出。
+- OpenAI-compatible 错误结构化透传：当 provider 返回 4xx/5xx 时，SSE 会携带 `error_detail`（provider/model/status/code/message/request_id）。
 - Dashboard 聚合接口 `/api/dashboard/stats`，从 `data/log` 真实 CSV 聚合统计数据。
 
 ### 2. 检索与模型调用链路
@@ -82,6 +84,30 @@ DeepSOC 是一个面向网络安全日志分析场景的 SOC (Security Operation
 - 拓扑结果本质是基于分类/来源统计的结构化可视化，尚非完整攻击链推理图谱。
 - 一些 HUD 文案和态势指标仍是演示语义，真实性仍需增强。
 - 页面动画较多（背景粒子连线 + Three.js 场景持续渲染 + 波形动效），在低性能设备上存在卡顿。
+
+---
+
+## 多智能体实现说明
+
+### 1. 后端编排架构
+
+- 入口：`/api/chat` 在 `mode=multi_agent` 时进入编排流程。
+- 编排器：`Orchestrator` 并发执行 `rag/web`，并在二者完成后执行 `synthesis`。
+- 模型配置：前端可按 agent 传递 `provider/model/provider_api_key`，后端逐 agent 合并默认配置。
+- 错误透传：OpenAI-compatible provider 失败时，后端提取结构化错误并透传到 SSE `agent_status(error)` 的 `error_detail` 字段。
+
+### 2. 前端消费与状态管理
+
+- 流解析：`src/api.js` 统一解析 SSE，支持 `agent_chunk/agent_status/content/error/done`。
+- 状态更新：`chatStore` 为每个 agent 维护 `status/content/error/errorDetail`。
+- 显示策略：`ChatMessage` 在多智能体折叠面板中展示 RAG/WEB 输出与错误详情。
+- 收口机制：后端显式发送 `done` 事件，前端在 `done` 或 `synthesis done/error` 时结束 loading。
+
+### 3. SSE 事件约定（多智能体）
+
+- `agent_chunk`: `{"type":"agent_chunk","agent_id":"rag|web|synthesis","content":"..."}`
+- `agent_status`: `{"type":"agent_status","agent_id":"...","status":"started|done|error","error":"...","error_detail":{...}}`
+- `done`: `{"type":"done"}`
 
 ---
 
@@ -228,7 +254,7 @@ ollama pull bge-large:latest
 - CORS 默认配置仍含旧端口（`8090`），如跨域失败需在 Django 设置中补充当前前端端口。
 - 背景粒子连线和 Three.js 拓扑长期动画会占用较高 GPU/CPU。
 - 图表语义目前主要基于 CSV 聚合与关键词风险分级（high/medium/low），分析深度有限。
-- “多智能体编排”尚未在代码中落地为独立工作流引擎。
+- 多智能体编排已在当前版本落地；下一阶段可进一步引入更复杂的图编排框架（如 LangGraph）与可视化追踪。
 
 ---
 
@@ -237,7 +263,7 @@ ollama pull bge-large:latest
 1. 扩充五大核心数据库样本规模与标注质量。
 2. 定义统一安全事件 Schema（IOC/CVE/节点/边/证据来源/处置优先级）。
 3. 将图表和拓扑从“聚合统计”升级到“真实攻击链语义渲染”。
-4. 引入流程编排层（如 LangGraph）落地多智能体协同。
+4. 在现有多智能体编排基础上引入图式工作流（如 LangGraph）与可观测链路追踪。
 5. 做前端性能治理（粒子降采样、动画节流、按需渲染）。
 
 ---

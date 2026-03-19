@@ -4,9 +4,21 @@ import { useAppStore } from '../stores/appStore'
 import { useChatStore } from '../stores/chatStore'
 
 const DEFAULT_AGENT_DATA = () => ({
-  rag: { status: 'idle', content: '' },
-  web: { status: 'idle', content: '' },
+  rag: { status: 'idle', content: '', error: '', errorDetail: null },
+  web: { status: 'idle', content: '', error: '', errorDetail: null },
 })
+
+function formatProviderError(detail, fallbackMessage = '流式响应出错') {
+  if (!detail || typeof detail !== 'object') return fallbackMessage
+
+  const provider = detail.provider || 'provider'
+  const model = detail.model || 'unknown-model'
+  const status = detail.status_code ? `HTTP ${detail.status_code}` : 'HTTP error'
+  const code = detail.error_code ? ` (${detail.error_code})` : ''
+  const message = detail.message || fallbackMessage
+
+  return `[${provider}/${model}] ${status}${code}: ${message}`
+}
 
 export function useChatSession({ apiClient, messagesContainerRef, chatInputRef }) {
   const chatStore = useChatStore()
@@ -23,6 +35,7 @@ export function useChatSession({ apiClient, messagesContainerRef, chatInputRef }
     llmProvider,
     llmModel,
     providerApiKey,
+    webSearchApiKey,
   } = storeToRefs(appStore)
 
   const lastUserMessage = ref('')
@@ -96,7 +109,64 @@ export function useChatSession({ apiClient, messagesContainerRef, chatInputRef }
     provider: llmProvider.value,
     modelName: llmModel.value,
     providerApiKey: providerApiKey.value,
+    webSearchApiKey: webSearchApiKey.value,
   })
+
+  const applyAgentStatus = (sessionId, aiMessageId, data) => {
+    chatStore.updateAgentStatus(
+      sessionId,
+      aiMessageId,
+      data.agent_id,
+      data.status,
+      data.error || '',
+      data.error_detail || null
+    )
+
+    if (data.status === 'error') {
+      const message = data.error_detail
+        ? formatProviderError(data.error_detail, data.error || '智能体执行失败')
+        : data.error || '智能体执行失败'
+      appStore.setError(message)
+    }
+
+    if (data.agent_id === 'synthesis' && (data.status === 'done' || data.status === 'error')) {
+      appStore.setLoading(false)
+    }
+  }
+
+  const applyGeneralEvent = (sessionId, aiMessageId, data) => {
+    if (data.type === 'content') {
+      chatStore.updateAgentChunk(sessionId, aiMessageId, 'synthesis', data.chunk || '')
+      return
+    }
+
+    if (data.type === 'think') {
+      chatStore.updateLastMessage(sessionId, { think_chunk: data.chunk })
+      return
+    }
+
+    if (data.type === 'metadata') {
+      chatStore.updateLastMessage(sessionId, { duration: data.duration })
+      return
+    }
+
+    if (data.type === 'agent_chunk') {
+      chatStore.updateAgentChunk(sessionId, aiMessageId, data.agent_id, data.content || '')
+      return
+    }
+
+    if (data.type === 'agent_status') {
+      applyAgentStatus(sessionId, aiMessageId, data)
+      return
+    }
+
+    if (data.type === 'error') {
+      const message = data.error_detail
+        ? formatProviderError(data.error_detail, data.chunk || '流式响应出错')
+        : data.chunk || '流式响应出错'
+      appStore.setError(message)
+    }
+  }
 
   const handleNormalSend = async (sessionId, content, extra) => {
     lastUserMessage.value = content
@@ -120,24 +190,12 @@ export function useChatSession({ apiClient, messagesContainerRef, chatInputRef }
     appStore.setError(null)
 
     const input = extra?.attachmentText ? `${content}\n\n[附件]\n${extra.attachmentText}` : content
+
     await apiClient.streamChat(
       sessionId,
       input,
       (data) => {
-        if (data.type === 'content') {
-          chatStore.updateAgentChunk(sessionId, aiMessageId, 'synthesis', data.chunk || '')
-        } else if (data.type === 'think') {
-          chatStore.updateLastMessage(sessionId, { think_chunk: data.chunk })
-        } else if (data.type === 'metadata') {
-          chatStore.updateLastMessage(sessionId, { duration: data.duration })
-        } else if (data.type === 'agent_chunk') {
-          chatStore.updateAgentChunk(sessionId, aiMessageId, data.agent_id, data.content || '')
-        } else if (data.type === 'agent_status') {
-          chatStore.updateAgentStatus(sessionId, aiMessageId, data.agent_id, data.status)
-        } else if (data.type === 'error') {
-          appStore.setError(data.chunk || '流式响应出错')
-        }
-
+        applyGeneralEvent(sessionId, aiMessageId, data)
         scrollToBottom()
       },
       (message) => {
@@ -161,7 +219,7 @@ export function useChatSession({ apiClient, messagesContainerRef, chatInputRef }
           scrollToBottom()
         },
         onAgentStatus: (data) => {
-          chatStore.updateAgentStatus(sessionId, aiMessageId, data.agent_id, data.status)
+          applyAgentStatus(sessionId, aiMessageId, data)
           scrollToBottom()
         },
       }
@@ -229,7 +287,10 @@ export function useChatSession({ apiClient, messagesContainerRef, chatInputRef }
         } else if (data.type === 'metadata') {
           chatStore.updateMessageAtIndex(sessionId, aiMessageIndex, { duration: data.duration })
         } else if (data.type === 'error') {
-          appStore.setError(data.chunk || '流式响应出错')
+          const message = data.error_detail
+            ? formatProviderError(data.error_detail, data.chunk || '流式响应出错')
+            : data.chunk || '流式响应出错'
+          appStore.setError(message)
         }
 
         scrollToBottom()

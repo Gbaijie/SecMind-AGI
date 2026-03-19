@@ -102,6 +102,20 @@
             <span v-else class="modal-tip">API Key 仅保存在当前浏览器本地并随请求发送到后端。</span>
           </div>
 
+            <div class="modal-field">
+              <label class="modal-label">WEB SEARCH API KEY</label>
+              <input
+                class="fui-input"
+                type="password"
+                :value="webSearchApiKey"
+                :placeholder="webSearchApiKeyPlaceholder"
+                autocomplete="off"
+                @input="updateWebSearchApiKey($event.target.value)"
+              />
+              <span class="modal-tip">联网搜索 API Key 仅保存在当前浏览器本地并随请求发送到后端。</span>
+            </div>
+
+
           <div class="modal-actions">
             <button class="primary" :disabled="isExporting" @click="handleExportSelectedSession">
               <DownloadIcon class="btn-icon" />
@@ -172,12 +186,15 @@ const {
   llmProvider,
   llmModel,
   providerApiKey,
+  webSearchApiKey,
   availableProviders,
   availableModels,
   providerApiKeyPlaceholder,
+  webSearchApiKeyPlaceholder,
   updateProvider,
   updateModel,
   updateProviderApiKey,
+  updateWebSearchApiKey,
   openSettingsModal,
   closeSettingsModal,
   handleExportSelectedSession,

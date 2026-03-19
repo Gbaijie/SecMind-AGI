@@ -1,20 +1,19 @@
 import json
 import logging
 import re
-from datetime import datetime
-from typing import Generator, Optional
+from typing import Generator
 
 from django.conf import settings
-from django.http import HttpRequest, StreamingHttpResponse
+from django.http import StreamingHttpResponse
 from ninja import File, NinjaAPI, Router
 from ninja.files import UploadedFile as NinjaUploadedFile
 
 from . import services
+from .agents import LlmConfig, MultiAgentConfig, Orchestrator, OrchestratorInput
 from .dashboard_stats import build_dashboard_stats
 from .models import APIKey
-from .schemas import LoginIn, LoginOut, ChatIn, ChatOut, HistoryOut, ErrorResponse
+from .schemas import ChatIn, ErrorResponse, HistoryOut, LoginIn, LoginOut
 from .services import get_or_create_session, model_api_call
-from .agents import Orchestrator, OrchestratorInput, LlmConfig, MultiAgentConfig
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +21,7 @@ api = NinjaAPI(title="DeepSeek-R1:7B API", version="0.0.1")
 
 
 def api_key_auth(request):
-    """验证请求头中的 API Key"""
+    """验证请求头中的 API Key。"""
     auth_header = request.headers.get("Authorization")
     if not auth_header:
         return None
@@ -30,8 +29,7 @@ def api_key_auth(request):
         scheme, key = auth_header.split()
         if scheme.lower() != "bearer":
             return None
-        api_key = APIKey.objects.get(key=key)
-        return api_key
+        return APIKey.objects.get(key=key)
     except (ValueError, APIKey.DoesNotExist):
         return None
 
@@ -40,10 +38,40 @@ router = Router(auth=api_key_auth)
 
 
 def clean_llm_reply(reply: str) -> str:
-    """
-    从模型原始回复中移除 <think>...</think> 标签块，仅保留用户可见回复。
-    """
+    """从模型原始回复中移除 <think>...</think> 标签块。"""
     return re.sub(r"<think>.*?</think>\s*", "", reply, flags=re.DOTALL).strip()
+
+
+def _build_agent_cfg(base_llm: LlmConfig, agent_cfgs: dict, agent_id: str) -> LlmConfig:
+    raw = agent_cfgs.get(agent_id) if isinstance(agent_cfgs, dict) else None
+    if not isinstance(raw, dict):
+        return base_llm
+    return LlmConfig(
+        provider=(raw.get("provider") or base_llm.provider or "ollama"),
+        model=(raw.get("model") or base_llm.model),
+        provider_api_key=(raw.get("provider_api_key") or base_llm.provider_api_key),
+    )
+
+
+def _build_multi_agent_config(base_llm: LlmConfig, agent_cfgs: dict) -> MultiAgentConfig:
+    return MultiAgentConfig(
+        rag=_build_agent_cfg(base_llm, agent_cfgs, "rag"),
+        web=_build_agent_cfg(base_llm, agent_cfgs, "web"),
+        synthesis=_build_agent_cfg(base_llm, agent_cfgs, "synthesis"),
+    )
+
+
+def _render_context(history_for_llm, user_input: str, final_reply: str) -> str:
+    lines = []
+    for msg in history_for_llm:
+        if msg.get("role") == "user":
+            lines.append(f"用户：{msg.get('content', '')}")
+        elif msg.get("role") == "assistant":
+            lines.append(f"回复：{msg.get('content', '')}")
+
+    lines.append(f"用户：{user_input}")
+    lines.append(f"回复：{final_reply}")
+    return "\n".join(lines).strip()
 
 
 @api.post("/login", response={200: LoginOut, 400: ErrorResponse, 403: ErrorResponse})
@@ -62,7 +90,7 @@ def login(request, data: LoginIn):
 def chat(request, data: ChatIn):
     if not request.auth:
         return StreamingHttpResponse(
-            "data: " + json.dumps({"type": "error", "chunk": "请先登录获取API Key"}) + "\n\n",
+            "data: " + json.dumps({"type": "error", "chunk": "请先登录获取API Key"}, ensure_ascii=False) + "\n\n",
             status=401,
             content_type="text/event-stream",
         )
@@ -71,7 +99,7 @@ def chat(request, data: ChatIn):
     user_input = data.user_input.strip()
     if not user_input:
         return StreamingHttpResponse(
-            "data: " + json.dumps({"type": "error", "chunk": "请输入消息内容"}) + "\n\n",
+            "data: " + json.dumps({"type": "error", "chunk": "请输入消息内容"}, ensure_ascii=False) + "\n\n",
             status=400,
             content_type="text/event-stream",
         )
@@ -84,14 +112,19 @@ def chat(request, data: ChatIn):
     selected_model = data.model_name
     selected_provider = (data.provider or "ollama").strip().lower()
     provider_api_key = data.provider_api_key
+    web_search_api_key = data.web_search_api_key
     mode = (data.mode or "").strip().lower() or "single"
 
     logger.info(
-        f"搜索选项 - 数据库: {use_db_search}, 联网: {use_web_search}, provider: {selected_provider}, model: {selected_model or 'default'}"
+        "搜索选项 - 数据库: %s, 联网: %s, provider: %s, model: %s",
+        use_db_search,
+        use_web_search,
+        selected_provider,
+        selected_model or "default",
     )
 
     if data.context and len(data.context) > 0:
-        logger.info(f"使用前端提供的 context (会话: {session_id}, 上下文长度: {len(data.context)})")
+        logger.info("使用前端提供的 context (会话: %s, 上下文长度: %s)", session_id, len(data.context))
         history_for_llm = data.context
         is_regeneration = False
     else:
@@ -101,20 +134,19 @@ def chat(request, data: ChatIn):
 
         if (
             len(conversation_history) >= 2
-            and conversation_history[-1]["role"] == "assistant"
-            and conversation_history[-2]["role"] == "user"
-            and conversation_history[-2]["content"] == user_input
+            and conversation_history[-1].get("role") == "assistant"
+            and conversation_history[-2].get("role") == "user"
+            and conversation_history[-2].get("content") == user_input
         ):
-            logger.info(f"检测到重新生成 (会话: {session_id})")
+            logger.info("检测到重新生成 (会话: %s)", session_id)
             history_for_llm = conversation_history[:-2]
             is_regeneration = True
-
         elif (
             len(conversation_history) >= 1
-            and conversation_history[-1]["role"] == "user"
-            and conversation_history[-1]["content"] == user_input
+            and conversation_history[-1].get("role") == "user"
+            and conversation_history[-1].get("content") == user_input
         ):
-            logger.info(f"检测到对失败消息的重新生成 (会话: {session_id})")
+            logger.info("检测到对失败消息的重新生成 (会话: %s)", session_id)
             history_for_llm = conversation_history[:-1]
             is_regeneration = True
 
@@ -131,83 +163,65 @@ def chat(request, data: ChatIn):
                     model_name=selected_model,
                     provider=selected_provider,
                     provider_api_key=provider_api_key,
+                    web_search_api_key=web_search_api_key,
                 ):
                     if not raw_chunk:
                         continue
 
-                    yield "data: " + json.dumps({"type": "content", "chunk": raw_chunk}) + "\n\n"
+                    if isinstance(raw_chunk, dict):
+                        yield "data: " + json.dumps(raw_chunk, ensure_ascii=False) + "\n\n"
+                        continue
+
+                    yield "data: " + json.dumps({"type": "content", "chunk": raw_chunk}, ensure_ascii=False) + "\n\n"
                     full_clean_reply += raw_chunk
             else:
-                # multi-agent SSE：按 agent_id 推送中间过程与最终综合输出
                 base_llm = LlmConfig(provider=selected_provider, model=selected_model, provider_api_key=provider_api_key)
-                agent_cfgs = data.agent_configs or {}
-
-                def _cfg(agent_id: str) -> LlmConfig:
-                    raw = agent_cfgs.get(agent_id) if isinstance(agent_cfgs, dict) else None
-                    if not isinstance(raw, dict):
-                        return base_llm
-                    return LlmConfig(
-                        provider=(raw.get("provider") or base_llm.provider or "ollama"),
-                        model=(raw.get("model") or base_llm.model),
-                        provider_api_key=(raw.get("provider_api_key") or base_llm.provider_api_key),
-                    )
-
-                cfg = MultiAgentConfig(rag=_cfg("rag"), web=_cfg("web"), synthesis=_cfg("synthesis"))
+                cfg = _build_multi_agent_config(base_llm, data.agent_configs or {})
                 orch = Orchestrator()
+
                 for evt in orch.run_stream(
-                    OrchestratorInput(query=user_input, history=history_for_llm, enable_rag=use_db_search, enable_web=use_web_search),
+                    OrchestratorInput(
+                        query=user_input,
+                        history=history_for_llm,
+                        enable_rag=use_db_search,
+                        enable_web=use_web_search,
+                        web_search_api_key=web_search_api_key,
+                    ),
                     cfg,
                 ):
                     yield "data: " + json.dumps(evt, ensure_ascii=False) + "\n\n"
                     if evt.get("type") == "agent_chunk" and evt.get("agent_id") == "synthesis":
                         full_clean_reply += evt.get("content", "")
 
-            try:
-                final_save = full_clean_reply.strip()
+            final_save = full_clean_reply.strip()
+            if not final_save:
+                logger.warning("会话 %s 未收到有效模型输出，跳过写入", session_id)
+                return
 
-                if data.context and len(data.context) > 0:
-                    new_context_str = ""
-                    for msg in history_for_llm:
-                        if msg["role"] == "user":
-                            new_context_str += f"\n用户：{msg['content']}\n"
-                        elif msg["role"] == "assistant":
-                            new_context_str += f"\n回复：{msg['content']}\n"
-
-                    new_context_str += f"\n用户：{user_input}\n"
-                    new_context_str += f"\n回复：{final_save}\n"
-                    session.context = new_context_str.strip()
-                    session.save()
-                    logger.info(f"编辑模式：会话 {session_id} 已更新 (用户: {user.user})")
-
-                elif is_regeneration:
-                    new_context_str = ""
-                    for msg in history_for_llm:
-                        if msg["role"] == "user":
-                            new_context_str += f"\n用户：{msg['content']}\n"
-                        elif msg["role"] == "assistant":
-                            new_context_str += f"\n回复：{msg['content']}\n"
-
-                    new_context_str += f"\n用户：{user_input}\n"
-                    new_context_str += f"\n回复：{final_save}\n"
-                    session.context = new_context_str.strip()
-                    session.save()
-
-                else:
-                    session.update_context(user_input, final_save)
-
-                logger.info(f"会话 {session_id} 已更新 (用户: {user.user})")
-            except Exception as e:
-                logger.error(f"数据库上下文更新失败: {e}")
-
-        except Exception as e:
-            logger.error(f"流式生成失败: {e}")
-            if mode == "multi_agent":
-                yield "data: " + json.dumps(
-                    {"type": "agent_status", "agent_id": "synthesis", "status": "error", "error": f"流处理失败: {e}"},
-                    ensure_ascii=False,
-                ) + "\n\n"
+            if (data.context and len(data.context) > 0) or is_regeneration:
+                session.context = _render_context(history_for_llm, user_input, final_save)
+                session.save()
             else:
-                yield "data: " + json.dumps({"type": "error", "chunk": f"流处理失败: {e}"}) + "\n\n"
+                session.update_context(user_input, final_save)
+
+            logger.info("会话 %s 已更新 (用户: %s)", session_id, user.user)
+        except Exception as e:
+            logger.error("流式生成失败: %s", e)
+            if mode == "multi_agent":
+                detail = getattr(e, "detail", None)
+                payload = {
+                    "type": "agent_status",
+                    "agent_id": "synthesis",
+                    "status": "error",
+                    "error": f"流处理失败: {e}",
+                }
+                if isinstance(detail, dict):
+                    payload["error_detail"] = detail
+                yield "data: " + json.dumps(payload, ensure_ascii=False) + "\n\n"
+            else:
+                yield "data: " + json.dumps({"type": "error", "chunk": f"流处理失败: {e}"}, ensure_ascii=False) + "\n\n"
+        finally:
+            yield "data: " + json.dumps({"type": "done"}, ensure_ascii=False) + "\n\n"
 
     response = StreamingHttpResponse(stream_generator(), content_type="text/event-stream")
     response["X-Accel-Buffering"] = "no"
@@ -280,7 +294,7 @@ def upload_file(request, file: NinjaUploadedFile = File(...)):
         return 400, {"error": "不支持的文件类型，仅支持 .txt / .docx / .xlsx"}
 
     except Exception as e:
-        logger.error(f"文件解析失败: {e}")
+        logger.error("文件解析失败: %s", e)
         return 400, {"error": f"文件解析失败: {e}"}
 
 

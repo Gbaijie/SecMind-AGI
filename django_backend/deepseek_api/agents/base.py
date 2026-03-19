@@ -12,6 +12,7 @@ from .types import LlmConfig
 class AgentRunInput:
     query: str
     history: Optional[List[dict]] = None
+    web_search_api_key: Optional[str] = None
 
 
 class BaseAgent:

@@ -45,7 +45,8 @@
                   </span>
                 </header>
                 <pre class="agent-node__content">{{ agentDataSafe.rag.content || '...' }}</pre>
-              </article>
+              <p v-if="agentDataSafe.rag.error" class="agent-node__error">{{ formatAgentError(agentDataSafe.rag) }}</p>
+                </article>
 
               <article class="agent-node">
                 <header class="agent-node__header">
@@ -55,7 +56,8 @@
                   </span>
                 </header>
                 <pre class="agent-node__content">{{ agentDataSafe.web.content || '...' }}</pre>
-              </article>
+              <p v-if="agentDataSafe.web.error" class="agent-node__error">{{ formatAgentError(agentDataSafe.web) }}</p>
+                </article>
             </div>
           </div>
         </section>
@@ -113,8 +115,8 @@ const props = defineProps({
   agentData: {
     type: Object,
     default: () => ({
-      rag: { status: 'idle', content: '' },
-      web: { status: 'idle', content: '' },
+      rag: { status: 'idle', content: '', error: '', errorDetail: null },
+      web: { status: 'idle', content: '', error: '', errorDetail: null },
     }),
   },
 })
@@ -136,10 +138,14 @@ const agentDataSafe = computed(() => ({
   rag: {
     status: props.agentData?.rag?.status || 'idle',
     content: props.agentData?.rag?.content || '',
+    error: props.agentData?.rag?.error || '',
+    errorDetail: props.agentData?.rag?.errorDetail || null,
   },
   web: {
     status: props.agentData?.web?.status || 'idle',
     content: props.agentData?.web?.content || '',
+    error: props.agentData?.web?.error || '',
+    errorDetail: props.agentData?.web?.errorDetail || null,
   },
 }))
 
@@ -159,13 +165,30 @@ const renderedContent = computed(() => {
 const formatAgentStatus = (status) => {
   if (status === 'started') return 'ANALYZING...'
   if (status === 'done') return 'DONE'
+  if (status === 'error') return 'ERROR'
   return 'IDLE'
 }
 
 const statusClass = (status) => {
   if (status === 'done') return 'is-done'
   if (status === 'started') return 'is-running'
+  if (status === 'error') return 'is-error'
   return 'is-idle'
+}
+
+const formatAgentError = (agent) => {
+  if (!agent?.errorDetail) {
+    return agent?.error || '执行失败'
+  }
+
+  const detail = agent.errorDetail
+  const provider = detail.provider || 'provider'
+  const model = detail.model || 'unknown-model'
+  const status = detail.status_code ? `HTTP ${detail.status_code}` : 'HTTP error'
+  const code = detail.error_code ? ` (${detail.error_code})` : ''
+  const message = detail.message || agent.error || '执行失败'
+
+  return `[${provider}/${model}] ${status}${code}: ${message}`
 }
 
 watch(
@@ -402,6 +425,10 @@ const formatTime = (date) => {
   color: var(--text-muted);
 }
 
+.agent-node__status.is-error {
+  color: #ff6b93;
+}
+
 .agent-node__content {
   margin: 0;
   padding: 0.42rem;
@@ -413,6 +440,18 @@ const formatTime = (date) => {
   font-size: 0.72rem;
   line-height: 1.55;
   color: #8fe8ff;
+}
+
+.agent-node__error {
+  margin: 0;
+  border-top: 1px solid rgba(255, 107, 147, 0.35);
+  padding: 0.35rem 0.42rem 0.45rem;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  line-height: 1.4;
+  color: #ff9bb7;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .terminal-text {

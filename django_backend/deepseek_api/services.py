@@ -3,13 +3,15 @@ import logging
 import os
 import threading
 import time
-from typing import Dict, Optional, List, Iterable
+import datetime
+from typing import Any, Dict, Optional, List, Iterable
 
 from ddgs import DDGS
 from django.conf import settings
 from django.core.cache import cache
 from openai import OpenAI
 from langchain_core.messages import BaseMessage
+import requests
 
 from topklogsystem import TopKLogSystem
 from .models import APIKey, RateLimit, ConversationSession
@@ -28,6 +30,11 @@ SILICONFLOW_MODEL_ALIASES = {
     "DeepSeek-V3.2": "deepseek-ai/DeepSeek-V3.2",
     "DeepSeek-R1": "deepseek-ai/DeepSeek-R1",
     "Qwen2.5-72B": "Qwen/Qwen2.5-72B-Instruct",
+    "deepseek-chat": "deepseek-ai/DeepSeek-V3.2",
+    "deepseek-reasoner": "deepseek-ai/DeepSeek-R1",
+    "gpt-4o-mini": "deepseek-ai/DeepSeek-V3.2",
+    "gpt-4": "deepseek-ai/DeepSeek-V3.2",
+    "gpt-3.5-turbo": "deepseek-ai/DeepSeek-V3.2",
     "deepseek-v3.2": "deepseek-ai/DeepSeek-V3.2",
     "deepseek-r1": "deepseek-ai/DeepSeek-R1",
     "qwen2.5-72b": "Qwen/Qwen2.5-72B-Instruct",
@@ -59,6 +66,8 @@ PROVIDER_API_KEY_ENV = {
     "minimax": "MINIMAX_API_KEY",
     "siliconflow": "SILICONFLOW_API_KEY",
 }
+
+WEB_SEARCH_API_KEY_ENV = "BOCHA_API_KEY"
 
 SRE_SYSTEM_PROMPT = """
 你是一个多任务SRE助手。你的首要任务是先判断用户意图：
@@ -113,6 +122,15 @@ def resolve_model_name(provider: str, model_name: Optional[str]) -> str:
         alias = SILICONFLOW_MODEL_ALIASES.get(normalized_model) or SILICONFLOW_MODEL_ALIASES.get(normalized_model.lower())
         if alias:
             return alias
+
+        lowered_model = normalized_model.lower()
+        if lowered_model in {"deepseek-chat", "deepseek-reasoner", "gpt-4o-mini", "gpt-4", "gpt-3.5-turbo"}:
+            fallback = PROVIDER_DEFAULT_MODELS["siliconflow"]
+            logger.warning(
+                f"siliconflow 模型 '{normalized_model}' 未直接支持，回退到默认模型 '{fallback}'"
+            )
+            return fallback
+
         return normalized_model
     
     if provider != "ollama":
@@ -153,28 +171,164 @@ def resolve_provider_api_key(provider: str, provider_api_key: Optional[str]) -> 
     return None
 
 
-def real_web_search(query: str, max_results: int = 3) -> List[Dict]:
-    logger.info(f"[REAL-WEB-SEARCH] 正在执行联网搜索: {query}")
-    try:
-        with DDGS() as ddgs:
-            results = ddgs.text(query, region="cn-zh", backend="yandex", max_results=max_results)
-            if not results:
-                logger.warning(f"联网搜索 '{query}' 没有返回结果。")
-                return []
+def resolve_web_search_api_key(web_search_api_key: Optional[str]) -> Optional[str]:
+    if web_search_api_key and web_search_api_key.strip():
+        return web_search_api_key.strip()
 
-            return [{"content": r["body"], "source": r["href"]} for r in results]
-    except Exception as e:
-        logger.error(f"DuckDuckGo 搜索失败: {e}")
+    fallback_key = os.environ.get(WEB_SEARCH_API_KEY_ENV)
+    if fallback_key and fallback_key.strip():
+        return fallback_key.strip()
+    return None
+
+
+class ProviderHttpError(Exception):
+    """OpenAI-compatible provider 调用失败，附带结构化错误详情。"""
+
+    def __init__(self, message: str, detail: Optional[Dict[str, Any]] = None):
+        super().__init__(message)
+        self.detail = detail or {}
+
+
+def _extract_error_body(exc: Exception) -> Dict[str, Any]:
+    body = getattr(exc, "body", None)
+    if isinstance(body, dict):
+        return body
+
+    response = getattr(exc, "response", None)
+    if response is not None:
+        try:
+            parsed = response.json()
+            if isinstance(parsed, dict):
+                return parsed
+        except Exception:
+            return {}
+
+    return {}
+
+
+def build_openai_compatible_error_detail(provider: str, model: str, exc: Exception) -> Dict[str, Any]:
+    response = getattr(exc, "response", None)
+    status_code = getattr(exc, "status_code", None)
+    if status_code is None and response is not None:
+        status_code = getattr(response, "status_code", None)
+
+    request_id = getattr(exc, "request_id", None)
+    if not request_id and response is not None:
+        headers = getattr(response, "headers", None)
+        if headers and hasattr(headers, "get"):
+            request_id = headers.get("x-request-id") or headers.get("request-id")
+
+    body = _extract_error_body(exc)
+    error_obj = body.get("error") if isinstance(body.get("error"), dict) else body
+
+    message = None
+    error_type = None
+    error_code = None
+    error_param = None
+
+    if isinstance(error_obj, dict):
+        message = error_obj.get("message")
+        error_type = error_obj.get("type")
+        error_code = error_obj.get("code")
+        error_param = error_obj.get("param")
+
+    if not message:
+        message = str(exc)
+
+    detail = {
+        "provider": provider,
+        "model": model,
+        "status_code": status_code,
+        "error_type": error_type,
+        "error_code": error_code,
+        "error_param": error_param,
+        "message": message,
+        "request_id": request_id,
+    }
+    return {k: v for k, v in detail.items() if v is not None and v != ""}
+
+
+def _raise_openai_compatible_error(provider: str, model: str, exc: Exception) -> None:
+    detail = build_openai_compatible_error_detail(provider, model, exc)
+    logger.error(
+        "OpenAI-compatible 调用失败 provider=%s model=%s status=%s code=%s message=%s",
+        provider,
+        model,
+        detail.get("status_code"),
+        detail.get("error_code"),
+        detail.get("message"),
+    )
+    raise ProviderHttpError(detail.get("message") or str(exc), detail) from exc
+
+
+def web_search(
+    query: str,
+    max_results: int = 3,
+    web_search_api_key: Optional[str] = None,
+) -> List[Dict]:
+    """
+    调用博查 Web Search API 进行联网检索
+    
+    设计思路：
+    1. 鉴于原始搜索引擎（如 DuckDuckGo）摘要过短，此处显式设置 "summary": True，要求博查引擎返回深度摘要，提升 RAG 质量。
+    2. 提取响应中的网页列表（webPages -> value），组装成统一的上下文格式供 LLM 消费。
+    
+    边界情况：
+    - API 实际返回的数量可能小于 count，需遍历实际返回的列表。
+    - 某些页面可能无法生成 summary，此时降级使用 snippet 字段。
+    """
+    logger.info(f"[REAL-WEB-SEARCH] 正在执行博查联网搜索: {query}")
+    
+    url = "https://api.bocha.cn/v1/web-search"
+    api_key = resolve_web_search_api_key(web_search_api_key)
+    if not api_key:
+        logger.warning("联网搜索 API Key 为空，跳过联网检索。")
         return []
+    
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+    
+    payload = {
+        "query": query,
+        "summary": True, 
+        "count": max_results,
+        "freshness": "noLimit" 
+    }
+    
+    response = requests.post(url, headers=headers, json=payload)
+    response_data = response.json()
+    
+    # 解析响应结构: SearchData -> webPages -> value
+    # 根据标准 API 包装格式，通常数据位于 data 键下
+    web_pages = response_data.get("data", {}).get("webPages", {}).get("value", [])
+    
+    results = []
+    for page in web_pages:
+        # 优先取深度摘要 summary，若为空则取简短片段 snippet
+        content = page.get("summary") or page.get("snippet") or ""
+        source = page.get("url", "N/A")
+        
+        if content:
+            results.append({"content": content, "source": source})
+            
+    if not results:
+        logger.warning(f"联网搜索 '{query}' 没有返回结果。")
+        
+    return results
 
 
 def _build_openai_messages(
     prompt: str,
-    conversation_history: Optional[List[Dict]],
-    log_results: List[Dict],
-    web_results: List[Dict],
-) -> List[Dict[str, str]]:
-    messages: List[Dict[str, str]] = [{"role": "system", "content": SRE_SYSTEM_PROMPT}]
+    conversation_history: list[dict],
+    log_results: list[dict],
+    web_results: list[dict],
+) -> list[dict[str, str]]:
+    current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S %A")
+    dynamic_system_prompt = f"{SRE_SYSTEM_PROMPT}\n\n[系统环境信息]\n当前系统时间：{current_time}"
+    
+    messages: list[dict[str, str]] = [{"role": "system", "content": dynamic_system_prompt}]
 
     if conversation_history:
         for msg in conversation_history:
@@ -231,34 +385,34 @@ def stream_openai_compatible_response(
     logger.info(f"使用 OpenAI 兼容接口调用 provider={provider}, model={model_name}, base_url={base_url}")
 
     client = OpenAI(api_key=api_key, base_url=base_url)
-
     request_kwargs = {
         "model": model_name,
         "messages": messages,
         "stream": True,
     }
 
-    # MiniMax 文档建议启用 reasoning_split，便于后续扩展思考流拆分。
     if provider == "minimax":
         request_kwargs["extra_body"] = {"reasoning_split": True}
         request_kwargs["temperature"] = 1.0
 
-    stream = client.chat.completions.create(**request_kwargs)
-    for chunk in stream:
-        if not getattr(chunk, "choices", None):
-            continue
-        delta = chunk.choices[0].delta
-        if not delta:
-            continue
+    try:
+        stream = client.chat.completions.create(**request_kwargs)
+        for chunk in stream:
+            if not getattr(chunk, "choices", None):
+                continue
+            delta = chunk.choices[0].delta
+            if not delta:
+                continue
 
-        # 部分推理模型会通过 reasoning_content 返回思考流。
-        reasoning_content = getattr(delta, "reasoning_content", None)
-        if reasoning_content:
-            yield reasoning_content
+            reasoning_content = getattr(delta, "reasoning_content", None)
+            if reasoning_content:
+                yield reasoning_content
 
-        content = getattr(delta, "content", None)
-        if content:
-            yield content
+            content = getattr(delta, "content", None)
+            if content:
+                yield content
+    except Exception as e:
+        _raise_openai_compatible_error(provider, model_name, e)
 
 
 def stream_llm_from_messages(
@@ -281,12 +435,10 @@ def stream_llm_from_messages(
             yield f"错误：{provider_name} API Key 为空，请在设置中填写后重试。"
             return
 
-        # 兼容 LangChain BaseMessage -> OpenAI messages
         if messages and isinstance(messages[0], BaseMessage):
             oa_messages: List[Dict[str, str]] = []
             for m in messages:  # type: ignore[assignment]
                 role = getattr(m, "type", None) or getattr(m, "role", None) or "user"
-                # langchain_core: HumanMessage.type == "human"
                 if role == "human":
                     role = "user"
                 elif role == "ai":
@@ -303,20 +455,23 @@ def stream_llm_from_messages(
             request_kwargs["extra_body"] = {"reasoning_split": True}
             request_kwargs["temperature"] = 1.0
 
-        stream = client.chat.completions.create(**request_kwargs)
-        for chunk in stream:
-            if not getattr(chunk, "choices", None):
-                continue
-            delta = chunk.choices[0].delta
-            if not delta:
-                continue
-            reasoning_content = getattr(delta, "reasoning_content", None)
-            if reasoning_content:
-                yield reasoning_content
-            content = getattr(delta, "content", None)
-            if content:
-                yield content
-        return
+        try:
+            stream = client.chat.completions.create(**request_kwargs)
+            for chunk in stream:
+                if not getattr(chunk, "choices", None):
+                    continue
+                delta = chunk.choices[0].delta
+                if not delta:
+                    continue
+                reasoning_content = getattr(delta, "reasoning_content", None)
+                if reasoning_content:
+                    yield reasoning_content
+                content = getattr(delta, "content", None)
+                if content:
+                    yield content
+            return
+        except Exception as e:
+            _raise_openai_compatible_error(provider_name, resolved_model_name, e)
 
     if provider_name != "ollama":
         yield f"错误：当前 provider={provider_name} 不支持该调用方式。"
@@ -326,12 +481,11 @@ def stream_llm_from_messages(
         yield "错误：日志分析系统未成功初始化，无法调用 ollama。"
         return
 
-    # OllamaLLM.stream 需要 LangChain messages
     if not messages or not isinstance(messages[0], BaseMessage):
         yield "错误：ollama 调用需要 LangChain messages。"
         return
 
-    llm = log_system._get_or_create_llm(resolved_model_name)  # 复用缓存，避免重复加载
+    llm = log_system._get_or_create_llm(resolved_model_name)
     for chunk in llm.stream(messages):  # type: ignore[arg-type]
         yield chunk
 
@@ -344,6 +498,7 @@ def model_api_call(
     model_name: Optional[str] = None,
     provider: Optional[str] = "ollama",
     provider_api_key: Optional[str] = None,
+    web_search_api_key: Optional[str] = None,
 ):
     """
     调用模型 API（流式响应）。
@@ -372,7 +527,7 @@ def model_api_call(
 
         if use_web_search:
             logger.info(f"执行联网搜索: {prompt}")
-            web_results = real_web_search(prompt, max_results=10)
+            web_results = web_search(prompt, max_results=10, web_search_api_key=web_search_api_key)
 
         if provider_name in OPENAI_COMPATIBLE_PROVIDERS:
             for chunk in stream_openai_compatible_response(
@@ -402,9 +557,12 @@ def model_api_call(
         ):
             yield chunk
 
+    except ProviderHttpError as e:
+        logger.error("model_api_call provider 调用失败: %s", e.detail)
+        yield {"type": "error", "chunk": e.detail.get("message") or str(e), "error_detail": e.detail}
     except Exception as e:
         logger.error(f"model_api_call 流式处理失败: {e}")
-        yield f"API 调用失败: {e}"
+        yield {"type": "error", "chunk": f"API 调用失败: {e}"}
 
 
 def create_api_key(username: str) -> str:

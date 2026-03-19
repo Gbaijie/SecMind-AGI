@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Iterable
 
 from .base import AgentRunInput, BaseAgent
@@ -7,12 +8,15 @@ from .prompts import build_search_agent_messages
 from .types import LlmConfig
 from .. import services
 
+logger = logging.getLogger(__name__)
+
 
 class SearchAgent(BaseAgent):
     agent_id = "web"
 
     def run_stream(self, run_input: AgentRunInput, llm: LlmConfig) -> Iterable[str]:
-        results = services.real_web_search(run_input.query, max_results=5)
+        results = services.web_search(run_input.query, max_results=5, web_search_api_key=run_input.web_search_api_key)
+        logger.info("WebAgent 联网检索完成: query=%s, count=%s", run_input.query, len(results))
         if results:
             lines = []
             for i, item in enumerate(results, 1):

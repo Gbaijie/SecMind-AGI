@@ -29,6 +29,56 @@ axiosApi.interceptors.response.use(
   }
 );
 
+function toReadableErrorMessage(data, fallback = '请求失败') {
+  if (!data || typeof data !== 'object') return fallback;
+
+  if (typeof data.chunk === 'string' && data.chunk.trim()) {
+    return data.chunk.trim();
+  }
+  if (typeof data.error === 'string' && data.error.trim()) {
+    return data.error.trim();
+  }
+
+  const detail = data.error_detail;
+  if (detail && typeof detail === 'object') {
+    const provider = detail.provider || 'provider';
+    const model = detail.model || 'unknown-model';
+    const status = detail.status_code ? `HTTP ${detail.status_code}` : 'HTTP error';
+    const code = detail.error_code ? ` (${detail.error_code})` : '';
+    const message = detail.message || fallback;
+    return `[${provider}/${model}] ${status}${code}: ${message}`;
+  }
+
+  return fallback;
+}
+
+function routeSseEvent(data, onData, streamOptions) {
+  if (!data || typeof data !== 'object') return;
+
+  if (data.type === 'agent_chunk') {
+    if (data.agent_id === 'rag' || data.agent_id === 'web') {
+      streamOptions.onAgentData?.(data);
+      return;
+    }
+    onData?.(data);
+    return;
+  }
+
+  if (data.type === 'agent_status') {
+    streamOptions.onAgentStatus?.(data);
+    if (data.status === 'error') {
+      onData?.({
+        type: 'error',
+        chunk: toReadableErrorMessage(data, '智能体执行失败'),
+        error_detail: data.error_detail,
+      });
+    }
+    return;
+  }
+
+  onData?.(data);
+}
+
 async function streamChat(
   sessionId,
   userInput,
@@ -58,52 +108,42 @@ async function streamChat(
     const provider = modelOptions.provider?.trim();
     const modelName = modelOptions.modelName?.trim();
     const providerApiKey = modelOptions.providerApiKey?.trim();
+    const webSearchApiKey = modelOptions.webSearchApiKey?.trim();
 
-    if (provider) {
-      body.provider = provider;
-    }
-
-    if (modelName) {
-      body.model_name = modelName;
-    }
-
-    if (providerApiKey) {
-      body.provider_api_key = providerApiKey;
-    }
+    if (provider) body.provider = provider;
+    if (modelName) body.model_name = modelName;
+    if (providerApiKey) body.provider_api_key = providerApiKey;
+    if (webSearchApiKey) body.web_search_api_key = webSearchApiKey;
 
     const mode = streamOptions.mode?.trim();
     const agentConfigs = streamOptions.agentConfigs;
-
-    if (mode) {
-      body.mode = mode;
-    }
-
-    if (mode === 'multi_agent' && agentConfigs) {
-      body.agent_configs = agentConfigs;
-    }
+    if (mode) body.mode = mode;
+    if (mode === 'multi_agent' && agentConfigs) body.agent_configs = agentConfigs;
 
     const response = await fetch('/api/chat', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
+        Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify(body),
     });
 
     if (!response.ok) {
-      try {
-        const errorText = await response.text();
-        if (errorText.includes('data:')) {
-          const errorData = JSON.parse(errorText.substring(errorText.indexOf('data:') + 5));
-          throw new Error(errorData.chunk || `HTTP error! status: ${response.status}`);
-        }
+      const errorText = await response.text();
+      let parsed = null;
 
-        const errorData = JSON.parse(errorText);
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
-      } catch (e) {
-        throw new Error(e.message || `HTTP error! status: ${response.status}`);
+      try {
+        if (errorText.includes('data:')) {
+          parsed = JSON.parse(errorText.substring(errorText.indexOf('data:') + 5));
+        } else {
+          parsed = JSON.parse(errorText);
+        }
+      } catch {
+        parsed = null;
       }
+
+      throw new Error(toReadableErrorMessage(parsed, `HTTP error! status: ${response.status}`));
     }
 
     if (!response.body) {
@@ -112,12 +152,20 @@ async function streamChat(
 
     const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
     let buffer = '';
+    let completed = false;
+    let streamClosed = false;
+
+    const notifyComplete = (duration) => {
+      if (completed) return;
+      completed = true;
+      onComplete?.(duration);
+    };
 
     while (true) {
       const { value, done } = await reader.read();
 
       if (done) {
-        if (onComplete) onComplete();
+        notifyComplete();
         break;
       }
 
@@ -128,47 +176,39 @@ async function streamChat(
         const line = buffer.substring(0, eolIndex).trim();
         buffer = buffer.substring(eolIndex + 2);
 
-        if (!line.startsWith('data:')) {
-          continue;
-        }
+        if (!line.startsWith('data:')) continue;
 
         const dataStr = line.substring(5).trim();
-        if (!dataStr) {
-          continue;
-        }
+        if (!dataStr) continue;
 
         try {
           const data = JSON.parse(dataStr);
-
-          if (data.type === 'agent_chunk') {
-            if (data.agent_id === 'rag' || data.agent_id === 'web') {
-              if (streamOptions.onAgentData) {
-                streamOptions.onAgentData(data);
-              }
-            } else if (onData) {
-              onData(data);
-            }
-          } else if (data.type === 'agent_status') {
-            if (streamOptions.onAgentStatus) {
-              streamOptions.onAgentStatus(data);
-            }
-          } else if (onData) {
-            // Backward compatible path for single-model stream events.
-            onData(data);
-          }
+          routeSseEvent(data, onData, streamOptions);
 
           if (data.type === 'metadata') {
-            if (onComplete) onComplete(data.duration);
+            notifyComplete(data.duration);
+          } else if (data.type === 'done') {
+            notifyComplete(data.duration);
+            streamClosed = true;
           }
         } catch (e) {
           console.error('Failed to parse SSE data:', dataStr, e);
-          if (onError) onError('Failed to parse stream data');
+          onError?.('Failed to parse stream data');
         }
+      }
+
+      if (streamClosed) {
+        try {
+          await reader.cancel();
+        } catch {
+          // ignore cancel errors
+        }
+        break;
       }
     }
   } catch (err) {
     console.error('Fetch stream chat failed:', err);
-    if (onError) onError(err.message || 'Failed to send message');
+    onError?.(err.message || 'Failed to send message');
   }
 }
 
@@ -189,7 +229,7 @@ export default {
 
   getDashboardStats() {
     return axiosApi.get('/dashboard/stats');
-  }
+  },
 };
 
 export async function uploadFile(file) {
@@ -200,9 +240,9 @@ export async function uploadFile(file) {
   const resp = await fetch('/api/upload_file', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${token}`
+      Authorization: `Bearer ${token}`,
     },
-    body: form
+    body: form,
   });
 
   if (!resp.ok) {

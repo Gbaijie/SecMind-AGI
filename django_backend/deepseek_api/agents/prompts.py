@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import List, Optional
 from langchain.prompts import ChatPromptTemplate, HumanMessagePromptTemplate, SystemMessagePromptTemplate, MessagesPlaceholder
-from langchain_core.messages import BaseMessage, AIMessage, HumanMessage
+from langchain_core.messages import BaseMessage, AIMessage, HumanMessage, SystemMessage
 
 # 保留原有的 _format_history 工具函数
 def _format_history(history: Optional[List[dict]]) -> List[BaseMessage]:
@@ -36,22 +36,27 @@ def build_vector_agent_messages(query: str, retrieved_snippets: str, history: Op
 
 def build_search_agent_messages(query: str, web_snippets: str, history: Optional[List[dict]] = None) -> List[BaseMessage]:
     """
-    优化点：侧重于威胁传递（Threat Intelligence）的时效性，关注 PoC 发布情况和外部黑客组织活跃度。
+    修复点：WebAgent 的提示词采用显式字符串拼接，避免模板变量在复杂上下文中丢失。
     """
-    system = SystemMessagePromptTemplate.from_template(
+    system_content = (
         "你现在是 DeepSOC 外部威胁情报专家（Web Search 专家层）。"
         "你的任务是从海量互联网信息中提取最具实效性的情报，如：最新的漏洞 PoC、黑客组织（APT）动态、以及该资产/IP 在全球范围内的信誉。"
     )
-    user = HumanMessagePromptTemplate.from_template(
-        "### 用户查询\n{query}\n\n"
-        "### 实时联网摘要\n{snippets}\n\n"
+
+    user_content = (
+        f"### 用户查询\n{query}\n\n"
+        "### 实时联网摘要（以下是联网检索原始结果，必须优先依据）\n"
+        f"{web_snippets}\n\n"
         "### 请提取并总结以下关键情报：\n"
         "1. **外部威胁态势**：该攻击手段或漏洞在野外（In-the-wild）的活跃程度及是否有公开利用脚本 (PoC)。\n"
         "2. **情报信誉度分析**：基于搜索结果，给出该指标（IP/Domain/Vulnerability）的风险评级建议。\n"
         "3. **外部验证建议**：建议用户通过哪些外部平台（如 VirusTotal, Shodan, Github）进行更深入的交叉验证。\n"
     )
-    prompt = ChatPromptTemplate.from_messages([system, MessagesPlaceholder("chat_history"), user])
-    return prompt.format_prompt(chat_history=_format_history(history), query=query, snippets=web_snippets).to_messages()
+
+    messages: List[BaseMessage] = [SystemMessage(content=system_content)]
+    messages.extend(_format_history(history))
+    messages.append(HumanMessage(content=user_content))
+    return messages
 
 def build_synthesis_agent_messages(query: str, rag_analysis: str, web_analysis: str, history: Optional[List[dict]] = None) -> List[BaseMessage]:
     """

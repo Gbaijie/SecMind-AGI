@@ -25,7 +25,7 @@ export function useChatSettings({ router, apiClient, currentSession, sessions })
   const chatStore = useChatStore()
   const appStore = useAppStore()
 
-  const { llmProvider, llmModel, providerApiKey } = storeToRefs(appStore)
+  const { llmProvider, llmModel, providerApiKey, webSearchApiKey } = storeToRefs(appStore)
 
   const showSettingsModal = ref(false)
   const isExporting = ref(false)
@@ -42,6 +42,8 @@ export function useChatSettings({ router, apiClient, currentSession, sessions })
     return 'Ollama 本地模式不需要 API Key'
   })
 
+  const webSearchApiKeyPlaceholder = computed(() => '输入博查 Web Search API Key')
+
   const updateProvider = (provider) => {
     appStore.setLlmProvider(provider)
   }
@@ -52,6 +54,10 @@ export function useChatSettings({ router, apiClient, currentSession, sessions })
 
   const updateProviderApiKey = (key) => {
     appStore.setProviderApiKey(key)
+  }
+
+  const updateWebSearchApiKey = (key) => {
+    appStore.setWebSearchApiKey(key)
   }
 
   watch(
@@ -163,12 +169,15 @@ export function useChatSettings({ router, apiClient, currentSession, sessions })
     llmProvider,
     llmModel,
     providerApiKey,
+    webSearchApiKey,
     availableProviders,
     availableModels,
     providerApiKeyPlaceholder,
+    webSearchApiKeyPlaceholder,
     updateProvider,
     updateModel,
     updateProviderApiKey,
+    updateWebSearchApiKey,
     openSettingsModal,
     closeSettingsModal,
     handleExportSelectedSession,

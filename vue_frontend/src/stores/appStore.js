@@ -3,6 +3,7 @@ import { defineStore } from 'pinia'
 const DEFAULT_PROVIDER = localStorage.getItem('llmProvider') || 'ollama'
 const DEFAULT_MODEL = localStorage.getItem('llmModel') || 'DeepSeek-R1:7b'
 const DEFAULT_PROVIDER_API_KEY = localStorage.getItem('providerApiKey') || ''
+const DEFAULT_WEB_SEARCH_API_KEY = localStorage.getItem('webSearchApiKey') || ''
 
 export const useAppStore = defineStore('app', {
   state: () => ({
@@ -16,6 +17,7 @@ export const useAppStore = defineStore('app', {
     llmProvider: DEFAULT_PROVIDER,
     llmModel: DEFAULT_MODEL,
     providerApiKey: DEFAULT_PROVIDER_API_KEY,
+    webSearchApiKey: DEFAULT_WEB_SEARCH_API_KEY,
   }),
 
   actions: {
@@ -79,6 +81,16 @@ export const useAppStore = defineStore('app', {
     clearProviderApiKey() {
       this.providerApiKey = ''
       localStorage.removeItem('providerApiKey')
+    },
+
+    setWebSearchApiKey(apiKey) {
+      this.webSearchApiKey = apiKey || ''
+      localStorage.setItem('webSearchApiKey', this.webSearchApiKey)
+    },
+
+    clearWebSearchApiKey() {
+      this.webSearchApiKey = ''
+      localStorage.removeItem('webSearchApiKey')
     },
   },
 })

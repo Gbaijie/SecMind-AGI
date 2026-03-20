@@ -3,7 +3,7 @@
     <n-grid :x-gap="14" :y-gap="14" cols="1" responsive="screen">
       <n-gi>
         <div ref="topologyPanelRef" class="topology-panel-host" v-if="!isTopologyCollapsed">
-          <FuiCard title="GLOBAL ATTACK TOPOLOGY" class="center-topology-card" :glow="true">
+          <FuiCard :title="topologyTitle" class="center-topology-card" :glow="true">
             <template #actions>
               <button
                 class="fui-icon-btn"
@@ -32,23 +32,26 @@
       <n-gi>
         <n-grid cols="1 s:1 m:3" responsive="screen" :x-gap="14" :y-gap="14">
           <n-gi>
-            <FuiCard title="THREAT RADAR" class="chart-card">
+            <!-- 替换为响应式标题变量 -->
+            <FuiCard :title="threatRadarTitle" class="chart-card">
               <ThreatRadarChart :stats="dashboardStats" :loading="statsLoading" />
             </FuiCard>
           </n-gi>
 
           <n-gi>
-            <FuiCard title="LOG INGEST STREAM" class="chart-card">
+            <!-- 替换为响应式标题变量 -->
+            <FuiCard :title="logIngestStreamTitle" class="chart-card">
               <LogInflowChart :stats="dashboardStats" :loading="statsLoading" />
             </FuiCard>
           </n-gi>
 
           <n-gi>
-            <FuiCard title="CATEGORY DISTRIBUTION" class="chart-card">
+            <!-- 替换为响应式标题变量 -->
+            <FuiCard :title="categoryDistributionTitle" class="chart-card">
               <div class="summary-strip">
-                <span>RECORDS {{ dashboardStats.summary?.total_records || 0 }}</span>
-                <span>SOURCES {{ dashboardStats.summary?.total_sources || 0 }}</span>
-                <span>CAT {{ dashboardStats.summary?.total_categories || 0 }}</span>
+                <span>RECORDS <strong class="ticker-value">{{ recordsTicker }}</strong></span>
+                <span>SOURCES <strong class="ticker-value">{{ sourcesTicker }}</strong></span>
+                <span>CAT <strong class="ticker-value">{{ categoriesTicker }}</strong></span>
               </div>
               <CategoryDonutChart :stats="dashboardStats" :loading="statsLoading" />
             </FuiCard>
@@ -66,7 +69,7 @@
       <div class="topology-modal-wrap">
         <NCard class="topology-modal-card" :bordered="false" embedded>
           <template #header>
-            <span class="topology-modal-title">GLOBAL ATTACK TOPOLOGY</span>
+            <span class="topology-modal-title">{{ topologyTitle }}</span>
           </template>
           <template #header-extra>
             <NButton
@@ -79,9 +82,6 @@
               <XIcon class="btn-icon" />
             </NButton>
           </template>
-          <div class="topology-modal-content">
-            <TopologyScene :topology="dashboardStats.topology" />
-          </div>
           <div class="topology-modal-content" v-if="fallbackPanelKey === 'topology'">
             <TopologyScene :topology="dashboardStats.topology" />
           </div>
@@ -92,7 +92,8 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useTransition } from '@vueuse/core'
 import { NButton, NCard, NGi, NGrid, NModal } from 'naive-ui'
 import {
   ChevronDownIcon,
@@ -112,10 +113,142 @@ import { useFullscreenPanel } from '../composables/useFullscreenPanel'
 
 const isTopologyCollapsed = ref(false)
 const topologyPanelRef = ref(null)
+// 1. 定义拓扑图标题响应式变量
+const topologyTitle = ref('GLOBAL ATTACK TOPOLOGY')
+// 2. 定义三个新标题的响应式变量
+const threatRadarTitle = ref('THREAT RADAR')
+const logIngestStreamTitle = ref('LOG INGEST STREAM')
+const categoryDistributionTitle = ref('CATEGORY DISTRIBUTION')
 
 const { dashboardStats, statsLoading } = useDashboardStats(api)
 const { fallbackPanelKey, togglePanel, closeFallbackPanel, isPanelActive } = useFullscreenPanel({
   topology: topologyPanelRef,
+})
+
+const summaryTargets = {
+  records: ref(0),
+  sources: ref(0),
+  categories: ref(0),
+}
+
+const easeOutCubic = (n) => 1 - Math.pow(1 - n, 3)
+
+const recordsTransition = useTransition(summaryTargets.records, {
+  duration: 700,
+  transition: easeOutCubic,
+})
+
+const sourcesTransition = useTransition(summaryTargets.sources, {
+  duration: 700,
+  transition: easeOutCubic,
+})
+
+const categoriesTransition = useTransition(summaryTargets.categories, {
+  duration: 700,
+  transition: easeOutCubic,
+})
+
+const recordsTicker = computed(() => Math.round(recordsTransition.value))
+const sourcesTicker = computed(() => Math.round(sourcesTransition.value))
+const categoriesTicker = computed(() => Math.round(categoriesTransition.value))
+
+watch(
+  () => dashboardStats.value?.summary,
+  (summary) => {
+    summaryTargets.records.value = Number(summary?.total_records) || 0
+    summaryTargets.sources.value = Number(summary?.total_sources) || 0
+    summaryTargets.categories.value = Number(summary?.total_categories) || 0
+  },
+  { immediate: true, deep: true },
+)
+
+// 保持原有 TextScramble 类不变
+class TextScramble {
+  constructor(onFrame) {
+    this.onFrame = onFrame
+    this.rafId = 0
+    this.symbols = '&!#%*^ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+  }
+
+  start(targetText, duration = 300) {
+    this.stop()
+    const text = String(targetText || '')
+    const totalFrames = Math.max(1, Math.round((duration / 1000) * 60))
+    let currentFrame = 0
+
+    const tick = () => {
+      currentFrame += 1
+      const progress = currentFrame / totalFrames
+      const stableCount = Math.floor(text.length * progress)
+
+      let scrambled = ''
+      for (let i = 0; i < text.length; i += 1) {
+        const char = text[i]
+        if (char === ' ') {
+          scrambled += ' '
+          continue
+        }
+
+        if (i < stableCount) {
+          scrambled += char
+          continue
+        }
+
+        const randomIndex = Math.floor(Math.random() * this.symbols.length)
+        scrambled += this.symbols[randomIndex]
+      }
+
+      this.onFrame(scrambled)
+
+      if (currentFrame < totalFrames) {
+        this.rafId = requestAnimationFrame(tick)
+      } else {
+        this.onFrame(text)
+      }
+    }
+
+    this.rafId = requestAnimationFrame(tick)
+  }
+
+  stop() {
+    if (!this.rafId) return
+    cancelAnimationFrame(this.rafId)
+    this.rafId = 0
+  }
+}
+
+// 3. 为每个标题创建 TextScramble 实例
+const topologyScramble = new TextScramble((value) => {
+  topologyTitle.value = value
+})
+const threatRadarScramble = new TextScramble((value) => {
+  threatRadarTitle.value = value
+})
+const logIngestStreamScramble = new TextScramble((value) => {
+  logIngestStreamTitle.value = value
+})
+const categoryDistributionScramble = new TextScramble((value) => {
+  categoryDistributionTitle.value = value
+})
+
+onMounted(() => {
+  // 4. 启动所有标题的乱码动画（添加轻微延迟让效果更自然）
+  topologyScramble.start('GLOBAL ATTACK TOPOLOGY', 300)
+  threatRadarScramble.start('THREAT RADAR', 300)
+  setTimeout(() => {
+    logIngestStreamScramble.start('LOG INGEST STREAM', 300)
+  }, 50)
+  setTimeout(() => {
+    categoryDistributionScramble.start('CATEGORY DISTRIBUTION', 300)
+  }, 100)
+})
+
+onBeforeUnmount(() => {
+  // 5. 停止所有动画实例，避免内存泄漏
+  topologyScramble.stop()
+  threatRadarScramble.stop()
+  logIngestStreamScramble.stop()
+  categoryDistributionScramble.stop()
 })
 
 const toggleTopology = () => {
@@ -138,6 +271,7 @@ const handleTopologyModalChange = (show) => {
 </script>
 
 <style scoped>
+/* 原有样式保持不变 */
 .dashboard-page {
   min-height: 0;
   height: 100%;
@@ -207,6 +341,13 @@ const handleTopologyModalChange = (show) => {
   font-size: 0.57rem;
   letter-spacing: 0.08em;
   padding: 0.12rem 0.35rem;
+}
+
+.ticker-value {
+  margin-left: 0.18rem;
+  color: #ccf4ff;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
 .topology-collapsed-bar {

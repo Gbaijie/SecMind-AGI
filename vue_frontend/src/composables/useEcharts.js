@@ -4,24 +4,33 @@ import { onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } fr
 export function useEcharts(
   buildOption,
   watchSource,
-  { deep = true, throttleMs = 80, debounceMs = 160 } = {}
+  { deep = true, throttleMs = 80, debounceMs = 160, viewportThreshold = 0.05 } = {},
 ) {
   const chartRef = ref(null)
   let chart = null
   let resizeObserver = null
+  let intersectionObserver = null
   let resizeThrottleTimer = null
   let resizeDebounceTimer = null
   let lastResizeTime = 0
+  let isInViewport = false
+  let pendingRender = false
 
-  const renderChart = () => {
+  const renderChart = (force = false) => {
     if (!chart) return
+
+    if (!force && !isInViewport) {
+      pendingRender = true
+      return
+    }
+
     chart.setOption(buildOption(), true)
+    pendingRender = false
   }
 
   const resizeChart = () => {
-    if (chart) {
-      chart.resize()
-    }
+    if (!chart || !isInViewport) return
+    chart.resize()
   }
 
   const clearResizeTimers = () => {
@@ -36,6 +45,8 @@ export function useEcharts(
   }
 
   const scheduleResize = () => {
+    if (!isInViewport) return
+
     const now = Date.now()
     const elapsed = now - lastResizeTime
 
@@ -60,29 +71,66 @@ export function useEcharts(
     }, debounceMs)
   }
 
+  const setupIntersectionObserver = () => {
+    if (!chartRef.value) return
+
+    if (typeof IntersectionObserver === 'undefined') {
+      isInViewport = true
+      renderChart(true)
+      scheduleResize()
+      return
+    }
+
+    intersectionObserver = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0]
+        if (!entry) return
+
+        isInViewport = entry.isIntersecting
+        if (isInViewport) {
+          renderChart(true)
+          scheduleResize()
+        }
+      },
+      {
+        threshold: viewportThreshold,
+      },
+    )
+
+    intersectionObserver.observe(chartRef.value)
+  }
+
   const initChart = () => {
     if (!chartRef.value || chart) return
 
     chart = echarts.init(chartRef.value)
-    renderChart()
+    setupIntersectionObserver()
 
     resizeObserver = new ResizeObserver(() => {
       scheduleResize()
     })
     resizeObserver.observe(chartRef.value)
-    scheduleResize()
   }
 
   const destroyChart = () => {
+    if (intersectionObserver) {
+      intersectionObserver.disconnect()
+      intersectionObserver = null
+    }
     if (resizeObserver) {
       resizeObserver.disconnect()
       resizeObserver = null
     }
+
     clearResizeTimers()
+
     if (chart) {
       chart.dispose()
       chart = null
     }
+
+    isInViewport = false
+    pendingRender = false
   }
 
   onMounted(() => {
@@ -98,7 +146,7 @@ export function useEcharts(
   })
 
   if (watchSource) {
-    watch(watchSource, renderChart, { deep })
+    watch(watchSource, () => renderChart(), { deep })
   }
 
   onBeforeUnmount(() => {

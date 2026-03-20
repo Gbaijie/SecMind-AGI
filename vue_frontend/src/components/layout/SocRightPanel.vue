@@ -187,9 +187,6 @@ const handleModalVisibleChange = (show) => {
   padding-right: 0.35rem;
 }
 
-.chart-card :deep(.corner-tr) {
-  opacity: 0.3;
-}
 
 .panel-host:fullscreen,
 .panel-host:-webkit-full-screen {

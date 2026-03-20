@@ -3,7 +3,7 @@
 </template>
 
 <script setup>
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { markRaw, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as THREE from 'three'
 
 const props = defineProps({
@@ -281,17 +281,17 @@ const animate = () => {
 onMounted(() => {
   if (!mountRef.value) return
 
-  scene = new THREE.Scene()
+  scene = markRaw(new THREE.Scene())
   scene.fog = new THREE.Fog(0x050814, 55, 135)
 
-  camera = new THREE.PerspectiveCamera(52, 1, 0.1, 300)
+  camera = markRaw(new THREE.PerspectiveCamera(52, 1, 0.1, 300))
   camera.position.set(0, 8, 58)
 
-  renderer = new THREE.WebGLRenderer({
+  renderer = markRaw(new THREE.WebGLRenderer({
     antialias: true,
     alpha: true,
-  })
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+  }))
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5))
   renderer.setClearColor(0x050814, 0)
 
   mountRef.value.appendChild(renderer.domElement)
@@ -326,7 +326,7 @@ onMounted(() => {
   const stars = new THREE.Points(starGeometry, starMaterial)
   scene.add(stars)
 
-  networkGroup = new THREE.Group()
+  networkGroup = markRaw(new THREE.Group())
   scene.add(networkGroup)
 
   buildNetwork()

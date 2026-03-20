@@ -4,6 +4,7 @@ import { NConfigProvider, darkTheme } from 'naive-ui';
 import App from './App.vue';
 import router from './router';
 import './assets/styles.css';
+import 'harmonyos-sans-sc-webfont-splitted';
 
 import 'highlight.js/styles/atom-one-dark.css';
 

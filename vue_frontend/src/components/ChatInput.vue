@@ -332,7 +332,7 @@ defineExpose({
   align-items: center;
   justify-content: space-between;
   gap: 0.65rem;
-  margin-bottom: 0.55rem;
+  margin-bottom: 0.1rem;
   flex-wrap: wrap;
 }
 
@@ -340,6 +340,21 @@ defineExpose({
   display: inline-flex;
   gap: 1rem;
   flex-wrap: wrap;
+  
+  /* [新增] 默认收纳隐藏 */
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  transform: translateY(5px);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); /* 平滑过渡动画 */
+}
+
+/* [新增] 当鼠标悬浮输入框，或输入框获得焦点时展开 */
+.terminal-input-shell:hover .toggle-form,
+.terminal-input-shell--focused .toggle-form {
+  max-height: 40px; /* 足够容纳开关的高度 */
+  opacity: 1;
+  transform: translateY(-15px);
 }
 
 .toggle-form :deep(.n-form-item) {
@@ -417,10 +432,25 @@ defineExpose({
 }
 
 .multi-agent-config {
-  margin: 0.15rem 0 0.65rem;
-  border: 1px solid var(--border-dim);
   background: linear-gradient(90deg, rgba(0, 229, 255, 0.08) 0%, rgba(0, 229, 255, 0.03) 55%, rgba(0, 0, 0, 0.15) 100%);
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  margin: 0;
+  padding: 0 0.55rem; 
+  border: 0 solid var(--border-dim);
+  transform: translateY(5px);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.terminal-input-shell:hover .multi-agent-config,
+.terminal-input-shell--focused .multi-agent-config {
+  max-height: 250px; 
+  opacity: 1;
+  margin: 0.15rem 0 0.65rem;
   padding: 0.48rem 0.55rem 0.55rem;
+  border-width: 1px;
+  transform: translateY(-6px);
 }
 
 .multi-agent-config :deep(.n-form-item-label__text) {

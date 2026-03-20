@@ -49,7 +49,7 @@
   /* ── 字体 ────────────────────────────────────────── */
   --font-ui: 'HarmonyOS Sans SC', 'HarmonyOS Sans', 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', sans-serif;
   --font-brand: 'Orbitron', sans-serif;
-  --font-mono: 'Roboto Mono', 'Consolas', monospace;
+  --font-mono: 'Roboto Mono', 'Consolas', 'HarmonyOS Sans SC', 'HarmonyOS Sans', 'PingFang SC', 'Microsoft YaHei', monospace;
 
   /* ── 切角尺寸 ────────────────────────────────────── */
   --clip-sm: 8px;

@@ -268,16 +268,23 @@ const formatTime = (date) => {
 <style scoped>
 .terminal-message {
   position: relative;
-  border-left: 1px solid var(--border-dim);
-  padding: 0.6rem 0.9rem 0.75rem;
-  background: linear-gradient(90deg, rgba(0, 229, 255, 0.05) 0%, rgba(0, 229, 255, 0.02) 36%, transparent 100%);
+  border-left: 2px solid var(--border-dim); /* 加粗左侧边框线 */
+  padding: 1.5rem 3rem 1.5rem;
+  background: linear-gradient(90deg, rgba(0, 229, 255, 0.08) 0%, rgba(0, 229, 255, 0.02) 25%, transparent 100%);
   clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+  transition: background 0.2s ease, border-left-color 0.2s ease;
+}
+
+.terminal-message:hover {
+  background: linear-gradient(90deg, rgba(0, 229, 255, 0.12) 0%, rgba(0, 229, 255, 0.03) 30%, transparent 100%);
+  border-left-color: rgba(0, 229, 255, 0.8);
 }
 
 .terminal-message--user {
   border-left-color: rgba(0, 255, 157, 0.5);
   background: linear-gradient(90deg, rgba(0, 255, 157, 0.08) 0%, rgba(0, 255, 157, 0.02) 30%, transparent 100%);
 }
+
 
 .terminal-message--ai {
   border-left-color: rgba(0, 229, 255, 0.55);
@@ -288,7 +295,9 @@ const formatTime = (date) => {
   align-items: center;
   justify-content: space-between;
   gap: 0.8rem;
-  margin-bottom: 0.45rem;
+  margin-bottom: 0.65rem;
+  padding-bottom: 0.45rem;
+  border-bottom: 1px dashed rgba(0, 229, 255, 0.15); 
   font-family: var(--font-mono);
   letter-spacing: 0.06em;
 }
@@ -303,7 +312,7 @@ const formatTime = (date) => {
 
 .meta-sigil {
   color: var(--neon-cyan);
-  font-size: 0.62rem;
+  font-size: 1rem;
   font-weight: 700;
 }
 
@@ -312,7 +321,7 @@ const formatTime = (date) => {
 }
 
 .meta-prompt {
-  font-size: 0.66rem;
+  font-size: 1rem;
   color: var(--text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -328,7 +337,7 @@ const formatTime = (date) => {
 }
 
 .timestamp {
-  font-size: 0.62rem;
+  font-size: 1rem;
   color: var(--text-muted);
 }
 
@@ -469,15 +478,15 @@ const formatTime = (date) => {
 .terminal-text {
   margin: 0;
   font-family: var(--font-mono);
-  font-size: 0.84rem;
-  line-height: 1.65;
-  color: var(--neon-cyan);
+  font-size: 1rem;
+  line-height: 1.8;
+  color: #e5b8b8; /* 柔和的灰青色替代高亮青色 */
   white-space: pre-wrap;
   word-break: break-word;
 }
 
 .terminal-message--user .terminal-text {
-  color: var(--neon-green);
+  color: #a3ebd5; 
 }
 
 .think-text {
@@ -499,34 +508,38 @@ const formatTime = (date) => {
 }
 
 .terminal-message__actions {
-  margin-top: 0.5rem;
+  margin-top: 0.75rem;
   display: flex;
   align-items: center;
   gap: 0.4rem;
   flex-wrap: wrap;
+  transition: opacity 0.2s ease;
 }
 
+.terminal-message:hover .terminal-message__actions {
+  opacity: 1; /* 鼠标进入卡片区域时激活 */
+}
 .text-btn {
   display: inline-flex;
   align-items: center;
   gap: 0.22rem;
-  padding: 0.2rem 0.42rem;
-  border: 1px solid var(--border-dim);
-  background: rgba(0, 0, 0, 0.18);
-  color: var(--text-secondary);
+  padding: 0.2rem 0.5rem;
+  border: 1px solid rgba(0, 229, 255, 0.15); /* 降低边框初始对比度 */
+  background: rgba(0, 0, 0, 0.2);
+  color: #7ba7bc; /* 降低文字初始对比度 */
   font-family: var(--font-mono);
   font-size: 0.62rem;
-  line-height: 1;
+  line-height: 1.2;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   clip-path: polygon(4px 0, 100% 0, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0 100%, 0 4px);
+  transition: all 0.2s ease;
 }
 
 .text-btn:hover:not(:disabled) {
   color: var(--neon-cyan);
-  border-color: var(--border-active);
-  background: var(--neon-cyan-dim);
-  box-shadow: none;
+  border-color: rgba(0, 229, 255, 0.5);
+  background: rgba(0, 229, 255, 0.1);
 }
 
 .text-btn:disabled {
@@ -541,8 +554,8 @@ const formatTime = (date) => {
 
 :deep(.markdown-body) {
   font-family: var(--font-mono);
-  font-size: 0.84rem;
-  line-height: 1.65;
+  font-size: 1rem;
+  line-height: 1.8;
   color: var(--neon-cyan);
   word-break: break-word;
 }
@@ -552,15 +565,58 @@ const formatTime = (date) => {
 }
 
 :deep(.markdown-body pre) {
-  background: rgba(0, 0, 0, 0.3);
-  border: 1px solid var(--border-dim);
-  padding: 0.8rem;
+  background: rgba(3, 8, 18, 0.6);
+  border: 1px solid rgba(0, 229, 255, 0.2);
+  padding: 0.9rem;
   overflow-x: auto;
-  margin: 0.5rem 0;
+  margin: 0.6rem 0;
+  border-radius: 4px; /* 代码块允许轻微圆角，与终端整体风格不冲突且更易读 */
 }
 
 :deep(.markdown-body code) {
   font-family: var(--font-mono);
+}
+
+:deep(.markdown-body > *:first-child) {
+  margin-top: 0 !important;
+}
+:deep(.markdown-body > *:last-child) {
+  margin-bottom: 0 !important;
+}
+
+:deep(.markdown-body h1),
+:deep(.markdown-body h2),
+:deep(.markdown-body h3),
+:deep(.markdown-body h4),
+:deep(.markdown-body h5),
+:deep(.markdown-body h6) {
+  font-size: 1.05rem; 
+  color: #00E5FF; 
+  margin: 1.4rem 0 0.6rem 0; 
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+:deep(.markdown-body ul),
+:deep(.markdown-body ol) {
+  margin: -3rem 0 -2.5rem 0;
+  padding-left: 2.5rem; 
+}
+
+:deep(.markdown-body li) {
+  margin-bottom: 0.2rem; 
+}
+
+:deep(.markdown-body li > ul),
+:deep(.markdown-body li > ol) {
+  margin-bottom: 0;
+  margin-top: 0.4rem;
+}
+
+:deep(.markdown-body strong),
+:deep(.markdown-body b) {
+  color: #00E5FF; 
+  font-weight: 700;
 }
 
 @media (max-width: 900px) {

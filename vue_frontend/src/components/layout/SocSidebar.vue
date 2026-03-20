@@ -173,7 +173,7 @@ defineEmits([
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--font-mono);
-  font-size: 0.68rem;
+  font-size: 0.85rem;
   letter-spacing: 0.05em;
   color: #c8e6f6;
 }

@@ -12,6 +12,7 @@
     "@vueuse/core": "^14.2.1",
     "axios": "^1.11.0",
     "echarts": "^6.0.0",
+    "harmonyos-sans-sc-webfont-splitted": "^1.1.0",
     "highlight.js": "^11.11.1",
     "marked": "^16.4.1",
     "naive-ui": "^2.44.1",

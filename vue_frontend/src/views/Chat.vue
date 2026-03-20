@@ -172,9 +172,10 @@ const lastDisplayMessage = computed(() => {
 }
 
 .terminal-meta {
-  font-size: 0.6rem;
-  color: #7ba7bc;
-  letter-spacing: 0.08em;
+  font-size: 0.85rem; 
+  font-weight: 600;  
+  color: #a1c8db;   
+  letter-spacing: 0.05em; 
   text-transform: uppercase;
   white-space: nowrap;
 }
@@ -217,7 +218,8 @@ const lastDisplayMessage = computed(() => {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 0.1rem;
+  gap: 2rem;
+  padding: 1.5rem 2rem 1rem 1rem;
 }
 
 .terminal-empty {
@@ -283,3 +285,4 @@ const lastDisplayMessage = computed(() => {
   padding-top: 0.56rem;
 }
 </style>
+

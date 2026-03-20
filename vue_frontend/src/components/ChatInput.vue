@@ -452,27 +452,25 @@ defineExpose({
   position: relative;
 }
 
-.prompt-col {
-  align-self: start;
-  padding-top: 0.44rem;
-}
+.prompt-col { align-self: start; padding-top: 0.26rem; }
 
 .prompt-label {
   font-family: var(--font-mono);
-  font-size: 0.73rem;
+  font-size: 0.8rem;
   color: var(--neon-cyan);
   letter-spacing: 0.04em;
 }
 
 .terminal-textarea {
-  min-height: 1.45rem;
+  min-height: 2rem;
+  margin-left: 10px;
 }
 
 .terminal-textarea :deep(.n-input-wrapper) {
   background: transparent;
   box-shadow: none;
   border: none;
-  padding: 0;
+  padding-left: 20px;
 }
 
 .terminal-textarea :deep(.n-input__textarea-el) {
@@ -480,11 +478,11 @@ defineExpose({
   background: transparent;
   color: var(--text-primary);
   font-family: var(--font-mono);
-  font-size: 0.85rem;
+  font-size: 0.9rem;
   line-height: 1.55;
   resize: none;
   clip-path: none;
-  padding: 0.26rem 0;
+  padding: 0.35rem 0rem;
 }
 
 .terminal-textarea :deep(.n-input__textarea-el::placeholder) {

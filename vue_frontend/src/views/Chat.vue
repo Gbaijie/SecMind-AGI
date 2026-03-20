@@ -109,6 +109,7 @@ const hasRenderablePayload = (message) => {
 
   if (text || thinking || attachment) return true
   if (message.isUser) return true
+  if (message.isMultiAgent) return true
 
   return false
 }
@@ -213,14 +214,14 @@ const lastDisplayMessage = computed(() => {
 }
 
 .messages-viewport-inner {
-  min-height: 100%;
+  flex: 1;
   display: flex;
   flex-direction: column;
   gap: 0.1rem;
 }
 
 .terminal-empty {
-  min-height: 160px;
+  min-height: 450px;
   display: grid;
   place-items: center;
   text-align: center;

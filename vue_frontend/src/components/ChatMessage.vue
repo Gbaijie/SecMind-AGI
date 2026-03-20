@@ -44,9 +44,9 @@
                     {{ formatAgentStatus(agentDataSafe.rag.status) }}
                   </span>
                 </header>
-                <pre class="agent-node__content">{{ agentDataSafe.rag.content || '...' }}</pre>
-              <p v-if="agentDataSafe.rag.error" class="agent-node__error">{{ formatAgentError(agentDataSafe.rag) }}</p>
-                </article>
+                <div class="agent-node__content markdown-body" v-html="ragRendered"></div>
+                <p v-if="agentDataSafe.rag.error" class="agent-node__error">{{ formatAgentError(agentDataSafe.rag) }}</p>
+              </article>
 
               <article class="agent-node">
                 <header class="agent-node__header">
@@ -55,9 +55,9 @@
                     {{ formatAgentStatus(agentDataSafe.web.status) }}
                   </span>
                 </header>
-                <pre class="agent-node__content">{{ agentDataSafe.web.content || '...' }}</pre>
-              <p v-if="agentDataSafe.web.error" class="agent-node__error">{{ formatAgentError(agentDataSafe.web) }}</p>
-                </article>
+                <div class="agent-node__content markdown-body" v-html="webRendered"></div>
+                <p v-if="agentDataSafe.web.error" class="agent-node__error">{{ formatAgentError(agentDataSafe.web) }}</p>
+              </article>
             </div>
           </div>
         </section>
@@ -100,6 +100,14 @@ marked.use({
       return `<pre><code class="hljs ${language}">${highlighted}</code></pre>`
     }
   }
+})
+
+const ragRendered = computed(() => {
+  return marked.parse(props.agentData?.rag?.content || '...')
+})
+
+const webRendered = computed(() => {
+  return marked.parse(props.agentData?.web?.content || '...')
 })
 
 const props = defineProps({
@@ -434,12 +442,16 @@ const formatTime = (date) => {
   padding: 0.42rem;
   max-height: 220px;
   overflow: auto;
-  white-space: pre-wrap;
-  word-break: break-word;
   font-family: var(--font-mono);
   font-size: 0.72rem;
   line-height: 1.55;
   color: #8fe8ff;
+}
+
+.agent-node__content :deep(p),
+.agent-node__content :deep(li) {
+  font-size: 0.72rem;
+  margin-bottom: 0.4rem;
 }
 
 .agent-node__error {

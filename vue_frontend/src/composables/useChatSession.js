@@ -169,7 +169,7 @@ export function useChatSession({ apiClient, messagesContainerRef, chatInputRef }
     }
 
     if (data.type === 'agent_chunk') {
-      chatStore.updateAgentChunk(sessionId, aiMessageId, data.agent_id, data.content || '')
+      chatStore.updateAgentChunk(sessionId, aiMessageId, data.agent_id, data.chunk || data.content || '')
       return
     }
 
@@ -233,7 +233,7 @@ export function useChatSession({ apiClient, messagesContainerRef, chatInputRef }
         mode: extra?.mode,
         agentConfigs: extra?.agentConfigs,
         onAgentData: (data) => {
-          chatStore.updateAgentChunk(sessionId, aiMessageId, data.agent_id, data.content || '')
+          chatStore.updateAgentChunk(sessionId, aiMessageId, data.agent_id, data.chunk || data.content || '')
           scrollToBottom()
         },
         onAgentStatus: (data) => {

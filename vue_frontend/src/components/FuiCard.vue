@@ -127,8 +127,6 @@ const customStyle = computed(() => ({
   overflow: hidden;
   isolation: isolate;
   background: radial-gradient(circle at 50% 0%, rgba(152, 205, 255, 0.09), rgba(13, 22, 43, 0.6) 42%, rgba(13, 22, 43, 0.6));
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
   box-shadow:
     inset 0 0 0 1px rgba(var(--card-accent-rgb), 0.22),
     inset 0 0 24px rgba(var(--card-accent-rgb), 0.1),

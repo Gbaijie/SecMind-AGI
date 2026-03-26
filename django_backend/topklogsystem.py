@@ -468,11 +468,40 @@ class TopKLogSystem:
         query_terms = self._build_query_terms(query)
         candidate_map: Dict[str, Dict[str, Any]] = {}
 
-        retriever = self.log_index.as_retriever(similarity_top_k=max(top_k * 4, 20))
-        vector_hits = retriever.retrieve(query)
-
         def _candidate_key(text: str, metadata: Dict[str, Any]) -> str:
             return str(metadata.get("raw_content_hash") or metadata.get("_id") or text)
+
+        # 1. 意图短路：直接利用 Chroma DB 原生查询提取的强特征 (如 CVE_ID)
+        if self.vector_store and hasattr(self.vector_store, "_collection"):
+            collection = self.vector_store._collection
+            
+            # 针对识别到的 CVE IDs 强制精确召回
+            for cve in query_signals.get("cve_ids", []):
+                exact_hits = collection.get(where={"cve_id": cve.upper()})
+                if exact_hits and exact_hits.get("ids"):
+                    for i in range(len(exact_hits["ids"])):
+                        text = exact_hits["documents"][i]
+                        metadata = exact_hits["metadatas"][i]
+                        
+                        if not self._matches_filters(metadata, filters):
+                            continue
+                            
+                        key = _candidate_key(text, metadata)
+                        item = candidate_map.setdefault(
+                            key,
+                            {
+                                "content": text,
+                                "metadata": metadata,
+                                "vector_score": 1.0,  # 强匹配直接赋满分
+                                "keyword_score": 1.0,
+                                "channels": set(),
+                            },
+                        )
+                        item["channels"].add("exact_metadata")
+
+        # 2. 常规向量召回
+        retriever = self.log_index.as_retriever(similarity_top_k=max(top_k * 4, 20))
+        vector_hits = retriever.retrieve(query)
 
         for node in vector_hits:
             text = (getattr(node, "text", "") or "").strip()
@@ -501,35 +530,25 @@ class TopKLogSystem:
             item["vector_score"] = max(item["vector_score"], vector_score)
             item["channels"].add("vector")
 
-        if use_keyword and hasattr(self.log_index, "docstore"):
-            all_docs = self.log_index.docstore.docs.values()
-
-            for doc in all_docs:
-                text = (getattr(doc, "text", "") or "").strip()
-                if not text:
-                    continue
-
-                metadata = dict(getattr(doc, "metadata", {}) or {})
-                if not self._matches_filters(metadata, filters):
-                    continue
-
-                keyword_score = self._score_keyword_match(text, metadata, query_terms, query_signals["exact_terms"])
-                if keyword_score < keyword_floor:
-                    continue
-
-                key = _candidate_key(text, metadata)
-                item = candidate_map.setdefault(
-                    key,
-                    {
-                        "content": text,
-                        "metadata": metadata,
-                        "vector_score": 0.0,
-                        "keyword_score": 0.0,
-                        "channels": set(),
-                    },
+        # 3. 修复后的关键词得分计算
+        # 仅对已进入 candidate_map 的候选者进行关键词算分，抛弃失效的空 docstore 遍历
+        if use_keyword:
+            for key, item in candidate_map.items():
+                text = item["content"]
+                metadata = item["metadata"]
+                
+                keyword_score = self._score_keyword_match(
+                    text, metadata, query_terms, query_signals["exact_terms"]
                 )
-                item["keyword_score"] = max(item["keyword_score"], keyword_score)
-                item["channels"].add("keyword")
+                
+                # 若来自 exact_metadata 强制召回，保留其 1.0 的满分
+                if "exact_metadata" not in item["channels"]:
+                    if keyword_score < keyword_floor:
+                        # 仅依靠向量召回但关键词极低的可以考虑剔除，此处保留原始逻辑仅更新分数
+                        item["keyword_score"] = max(item["keyword_score"], keyword_score)
+                    else:
+                        item["keyword_score"] = max(item["keyword_score"], keyword_score)
+                        item["channels"].add("keyword")
 
         return candidate_map, query_signals
 

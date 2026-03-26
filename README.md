@@ -127,6 +127,30 @@ DeepSOC 是一个面向网络安全日志分析场景的 SOC（Security Operatio
 - `agent_status`: `{"type":"agent_status","agent_id":"...","status":"started|done|error","error":"...","error_detail":{...}}`
 - `done`: `{"type":"done"}`
 
+### 4. P0 重构：从“文本流水线”升级为“可解释分工推理”
+
+为响应答辩评委对“系统架构实际意义”的要求，`agents/` 已完成一轮 P0 级重构：
+
+1. 职责物理隔离（Prompt 级硬约束）
+
+- `RAG Agent`：只允许读取内部数据库证据，不允许下最终结论。
+- `Web Agent`：只允许提取外部威胁情报，不允许下最终结论。
+- `Synthesis Agent`：只消费前置 JSON 报文，负责冲突解决与最终定性。
+
+2. 前置 Agent 强制 JSON 输出
+
+- RAG/Web Prompt 统一要求“仅输出一个 JSON 对象”。
+- JSON 中包含 `agent`、`found`、`confidence` 等字段，便于前端按字段渲染与审计。
+
+3. 无异常分支的稳健 JSON 净化
+
+- 编排层不依赖异常分支做解析回退，而是通过正则优先提取 JSON 代码块或 `{...}` 对象块。
+- 若模型输出被污染（夹杂解释文本），会降级为可追踪的 fallback JSON，确保传给 Synthesis 的输入仍是结构化数据。
+
+4. 对外陈述（可直接用于答辩）
+
+> 我们重构了多智能体协同机制，摒弃了简单的文本拼接流水线。现在系统是一套可解释的分工推理架构：底层 RAG Agent 和 Web Agent 被严格约束为“只读不判”的结构化数据探针，输出包含置信度的 JSON 报文；顶层 Synthesis Agent 作为中枢，消费这些 JSON 执行冲突解决和最终定性。整个决策过程可在前端透明展示并可追溯审计。
+
 ---
 
 ## 核心接口

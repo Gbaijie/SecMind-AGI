@@ -11,8 +11,8 @@ from .. import services
 @dataclass(frozen=True)
 class SynthesisInput:
     query: str
-    rag_analysis: str
-    web_analysis: str
+    rag_payload_json: str
+    web_payload_json: str
     history: Optional[List[dict]] = None
 
 
@@ -22,8 +22,8 @@ class SynthesisAgent:
     def run_stream(self, run_input: SynthesisInput, llm: LlmConfig) -> Iterable[str]:
         messages = build_synthesis_agent_messages(
             query=run_input.query,
-            rag_analysis=run_input.rag_analysis,
-            web_analysis=run_input.web_analysis,
+            rag_payload_json=run_input.rag_payload_json,
+            web_payload_json=run_input.web_payload_json,
             history=run_input.history,
         )
         for chunk in services.stream_llm_from_messages(

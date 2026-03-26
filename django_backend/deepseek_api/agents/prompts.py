@@ -1,56 +1,111 @@
 from __future__ import annotations
-from typing import List, Optional
-from langchain.prompts import ChatPromptTemplate, HumanMessagePromptTemplate, SystemMessagePromptTemplate, MessagesPlaceholder
-from langchain_core.messages import BaseMessage, AIMessage, HumanMessage, SystemMessage
 
-# 保留原有的 _format_history 工具函数
+import json
+from typing import List, Optional
+
+from langchain.prompts import ChatPromptTemplate, HumanMessagePromptTemplate, MessagesPlaceholder, SystemMessagePromptTemplate
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
+
+
+RAG_OUTPUT_SCHEMA = {
+    "agent": "rag",
+    "scope": "internal_evidence_only",
+    "query": "string",
+    "found": [
+        {
+            "indicator": "string",
+            "evidence": "string",
+            "source": "string",
+            "risk_level": "Critical|High|Medium|Low|Info|Unknown",
+            "confidence": 0.0,
+        }
+    ],
+    "coverage": "high|medium|low",
+    "confidence": 0.0,
+    "cannot_decide_reason": "string",
+}
+
+
+WEB_OUTPUT_SCHEMA = {
+    "agent": "web",
+    "scope": "external_intel_only",
+    "query": "string",
+    "found": [
+        {
+            "indicator": "string",
+            "intel": "string",
+            "source": "string",
+            "published_at": "string",
+            "confidence": 0.0,
+        }
+    ],
+    "trend": "active|emerging|unclear",
+    "confidence": 0.0,
+    "cannot_decide_reason": "string",
+}
+
+
 def _format_history(history: Optional[List[dict]]) -> List[BaseMessage]:
-    if not history: return []
+    if not history:
+        return []
     formatted: List[BaseMessage] = []
     for msg in history:
         role = (msg.get("role") or "").strip().lower()
         content = (msg.get("content") or "").strip()
-        if not content: continue
+        if not content:
+            continue
         formatted.append(HumanMessage(content=content) if role == "user" else AIMessage(content=content))
     return formatted
 
+
+def _render_schema(schema: dict) -> str:
+    return json.dumps(schema, ensure_ascii=False, indent=2)
+
+
 def build_vector_agent_messages(query: str, retrieved_snippets: str, history: Optional[List[dict]] = None) -> List[BaseMessage]:
-    """
-    优化点：强调对内部五大数据库（CVE/IOC/攻击模式等）的特征提取，要求输出威胁判定逻辑。
-    """
     system = SystemMessagePromptTemplate.from_template(
-        "你现在是 DeepSOC 核心安全分析专家（RAG 专家层）。"
-        "你的职责是深挖内部安全数据库（CVE 漏洞、IOC 情报、Web 攻击模式、安全案例库及处置策略）的关联信息。"
-        "必须严守‘证据驱动’原则，仅基于检索内容分析，严禁编造不存在的特征。"
+        "你是 DeepSOC 的 RAG Agent。"
+        "你只允许执行内部证据提取，不允许做最终结论、不允许给处置定级、不允许输出行动建议。"
+        "你只能使用给定的内部数据库检索上下文，不得补充外部信息。"
     )
     user = HumanMessagePromptTemplate.from_template(
-        "### 待分析查询\n{query}\n\n"
-        "### 内部库检索结果 (Context)\n{snippets}\n\n"
-        "### 请按以下结构输出深度分析：\n"
-        "1. **威胁特征匹配**：提取检索内容中与攻击者 IP、文件 Hash、CVE 编号或攻击特征（如 SQLi 载荷）匹配的线索。\n"
-        "2. **内部风险研判**：根据检索到的案例和规则，判断当前行为是真实攻击、已知漏洞利用还是误报。\n"
-        "3. **防御策略对标**：从处置策略模板库中提取最匹配的加固方案或缓解措施。\n"
+        "### 用户查询\n{query}\n\n"
+        "### 内部数据库检索结果（JSON）\n{snippets}\n\n"
+        "### 输出约束（必须全部满足）\n"
+        "1. 只能输出一个 JSON 对象，不能输出 Markdown、解释文字或代码块标记。\n"
+        "2. `agent` 必须为 `rag`。\n"
+        "3. `found` 中仅保留可追溯的内部证据条目；若无命中则输出空数组。\n"
+        "4. `confidence` 范围为 0 到 1。\n"
+        "5. 严禁输出最终结论（例如“确定为攻击”）。\n\n"
+        "### JSON Schema\n{schema}"
     )
     prompt = ChatPromptTemplate.from_messages([system, MessagesPlaceholder("chat_history"), user])
-    return prompt.format_prompt(chat_history=_format_history(history), query=query, snippets=retrieved_snippets).to_messages()
+    return prompt.format_prompt(
+        chat_history=_format_history(history),
+        query=query,
+        snippets=retrieved_snippets,
+        schema=_render_schema(RAG_OUTPUT_SCHEMA),
+    ).to_messages()
+
 
 def build_search_agent_messages(query: str, web_snippets: str, history: Optional[List[dict]] = None) -> List[BaseMessage]:
-    """
-    修复点：WebAgent 的提示词采用显式字符串拼接，避免模板变量在复杂上下文中丢失。
-    """
     system_content = (
-        "你现在是 DeepSOC 外部威胁情报专家（Web Search 专家层）。"
-        "你的任务是从海量互联网信息中提取最具实效性的情报，如：最新的漏洞 PoC、黑客组织（APT）动态、以及该资产/IP 在全球范围内的信誉。"
+        "你是 DeepSOC 的 Web Agent。"
+        "你只允许执行外部情报提取，不允许做最终结论、不允许输出处置建议。"
+        "你只能使用给定的联网检索结果，不得复述内部数据库判断。"
     )
-
     user_content = (
         f"### 用户查询\n{query}\n\n"
-        "### 实时联网摘要（以下是联网检索原始结果，必须优先依据）\n"
+        "### 联网检索结果（JSON）\n"
         f"{web_snippets}\n\n"
-        "### 请提取并总结以下关键情报：\n"
-        "1. **外部威胁态势**：该攻击手段或漏洞在野外（In-the-wild）的活跃程度及是否有公开利用脚本 (PoC)。\n"
-        "2. **情报信誉度分析**：基于搜索结果，给出该指标（IP/Domain/Vulnerability）的风险评级建议。\n"
-        "3. **外部验证建议**：建议用户通过哪些外部平台（如 VirusTotal, Shodan, Github）进行更深入的交叉验证。\n"
+        "### 输出约束（必须全部满足）\n"
+        "1. 只能输出一个 JSON 对象，不能输出 Markdown、解释文字或代码块标记。\n"
+        "2. `agent` 必须为 `web`。\n"
+        "3. `found` 中仅保留可引用来源的外部情报条目；若无命中则输出空数组。\n"
+        "4. `confidence` 范围为 0 到 1。\n"
+        "5. 严禁输出最终结论（例如“确认入侵”）。\n\n"
+        "### JSON Schema\n"
+        f"{_render_schema(WEB_OUTPUT_SCHEMA)}"
     )
 
     messages: List[BaseMessage] = [SystemMessage(content=system_content)]
@@ -58,25 +113,33 @@ def build_search_agent_messages(query: str, web_snippets: str, history: Optional
     messages.append(HumanMessage(content=user_content))
     return messages
 
-def build_synthesis_agent_messages(query: str, rag_analysis: str, web_analysis: str, history: Optional[List[dict]] = None) -> List[BaseMessage]:
-    """
-    优化点：作为“总指挥”，要求其进行冲突解决（Conflict Resolution），并生成结构化的 IR（事故响应）操作清单。
-    """
+
+def build_synthesis_agent_messages(
+    query: str,
+    rag_payload_json: str,
+    web_payload_json: str,
+    history: Optional[List[dict]] = None,
+) -> List[BaseMessage]:
     system = SystemMessagePromptTemplate.from_template(
-        "你现在是 DeepSOC 首席运营官（Synthesis 决策层）。"
-        "你需要对内部 RAG 专家和外部情报专家的结论进行逻辑整合。若内外信息冲突（如内网判定为合规测试但外网显示为恶意 IP），必须通过权重对比给出最稳妥的研判结论。"
+        "你是 DeepSOC 的 Synthesis Agent。"
+        "你必须消费两个前置 Agent 的 JSON 报文，并做冲突解决与最终定性。"
+        "如果输入存在分歧，明确写出权衡规则与证据优先级。"
     )
     user = HumanMessagePromptTemplate.from_template(
         "### 原始安全诉求\n{query}\n\n"
-        "### 专家层输入\n"
-        "**[RAG 专家分析]**：\n{rag}\n\n"
-        "**[Web 专家分析]**：\n{web}\n\n"
-        "### 请生成最终的 SOC 处置决策：\n"
-        "1. **最终结论与定级**：一句话说明威胁性质及其严重程度（高/中/低）。\n"
-        "2. **研判依据**：总结为什么得出此结论，若有专家分歧请说明你是如何权衡的。\n"
-        "3. **紧急处置清单 (Immediate Actions)**：给出针对此事件的‘封禁/隔离/修复’具体步骤，要求按优先级排序。\n"
-        "4. **中长期加固建议**：针对此类潜在风险，SOC 应如何优化规则或加固架构。\n"
-        "--- (直接输出正文，不要包含‘好的，我明白了’等废话) ---"
+        "### RAG Agent JSON\n{rag_json}\n\n"
+        "### Web Agent JSON\n{web_json}\n\n"
+        "### 输出要求\n"
+        "1. 最终结论与风险定级（Critical/High/Medium/Low/Info）。\n"
+        "2. 冲突解决过程（若无冲突写“无冲突”）。\n"
+        "3. 紧急处置清单（按优先级编号）。\n"
+        "4. 中长期加固建议（不超过 5 条）。\n"
+        "5. 引用证据时注明来源来自 RAG 还是 Web。"
     )
     prompt = ChatPromptTemplate.from_messages([system, MessagesPlaceholder("chat_history"), user])
-    return prompt.format_prompt(chat_history=_format_history(history), query=query, rag=rag_analysis, web=web_analysis).to_messages()
+    return prompt.format_prompt(
+        chat_history=_format_history(history),
+        query=query,
+        rag_json=rag_payload_json,
+        web_json=web_payload_json,
+    ).to_messages()

@@ -27,6 +27,9 @@
 
       <NScrollbar class="messages-viewport" :ref="messagesContainerRef">
         <div class="messages-viewport-inner">
+          <NAlert v-if="entryHint" class="terminal-entry-hint" type="info" :show-icon="true">
+            {{ entryHint }}
+          </NAlert>
           <div v-if="isEmptyState" class="terminal-empty">
             <div class="terminal-empty-art">
               <svg height="4em" viewBox="0 0 24 24" width="4em" xmlns="http://www.w3.org/2000/svg">
@@ -86,7 +89,8 @@ const props = defineProps({
   currentSession: { type: String, default: '' },
   messages: { type: Array, default: () => [] },
   loading: { type: Boolean, default: false },
-  error: { type: String, default: '' },
+    error: { type: String, default: '' },
+    entryHint: { type: String, default: '' },
   onSendMessage: { type: Function, required: true },
   onRegenerate: { type: Function, required: true },
   onEditMessage: { type: Function, required: true },
@@ -99,7 +103,8 @@ const {
   messages,
   loading,
   error,
-  onSendMessage,
+    onSendMessage,
+    entryHint,
   onRegenerate,
   onEditMessage,
   messagesContainerRef,
@@ -289,6 +294,12 @@ const lastDisplayMessage = computed(() => {
   margin-top: 0.5rem;
   border-top: 1px solid rgba(0, 229, 255, 0.16);
   padding-top: 0.56rem;
+}
+
+.terminal-entry-hint {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.08em;
 }
 </style>
 

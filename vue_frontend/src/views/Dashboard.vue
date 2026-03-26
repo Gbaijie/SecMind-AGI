@@ -38,48 +38,124 @@
       <n-gi>
         <n-grid cols="1 s:1 m:3" responsive="screen" :x-gap="14" :y-gap="14">
           <n-gi>
-            <FuiCard :title="threatRadarTitle" class="chart-card">
-              <ThreatRadarChart :stats="dashboardStats" :loading="statsLoading" />
-            </FuiCard>
+            <div ref="radarPanelRef" class="chart-panel-host">
+              <ChartDrillGuidance
+                :banner-visible="isBannerVisible('radar')"
+                :intro-visible="isIntroVisible('radar')"
+                banner-text="点击图例或高亮区域进入分析终端 · Esc 退出"
+                intro-title="雷达图下钻"
+                intro-text="进入全屏后，可点击图例、高亮区域或峰值进入分析终端。"
+                @dismiss="dismissIntro('radar')"
+              />
+              <FuiCard :title="threatRadarTitle" class="chart-card">
+                <template #actions>
+                  <button
+                    class="fui-icon-btn"
+                    :title="isPanelActive('radar') ? '退出全屏威胁雷达图' : '全屏威胁雷达图'"
+                    @click="toggleChartFullscreen('radar')"
+                  >
+                    <MinimizeIcon v-if="isPanelActive('radar')" class="btn-icon" />
+                    <MaximizeIcon v-else class="btn-icon" />
+                  </button>
+                </template>
+                <ThreatRadarChart
+                  :stats="dashboardStats"
+                  :loading="statsLoading"
+                  :fullscreen="isPanelActive('radar')"
+                  @chart-click="handleChartDrillDown"
+                />
+              </FuiCard>
+            </div>
           </n-gi>
 
           <n-gi>
-            <FuiCard :title="logIngestStreamTitle" class="chart-card">
-              <LogInflowChart :stats="dashboardStats" :loading="statsLoading" />
-            </FuiCard>
+            <div ref="streamPanelRef" class="chart-panel-host">
+              <ChartDrillGuidance
+                :banner-visible="isBannerVisible('stream')"
+                :intro-visible="isIntroVisible('stream')"
+                banner-text="点击图例或峰值进入分析终端 · Esc 退出"
+                intro-title="日志流下钻"
+                intro-text="进入全屏后，点击图例、柱形峰值或折线高点即可跳转分析终端。"
+                @dismiss="dismissIntro('stream')"
+              />
+              <FuiCard :title="logIngestStreamTitle" class="chart-card">
+                <template #actions>
+                  <button
+                    class="fui-icon-btn"
+                    :title="isPanelActive('stream') ? '退出全屏日志流入图' : '全屏日志流入图'"
+                    @click="toggleChartFullscreen('stream')"
+                  >
+                    <MinimizeIcon v-if="isPanelActive('stream')" class="btn-icon" />
+                    <MaximizeIcon v-else class="btn-icon" />
+                  </button>
+                </template>
+                <LogInflowChart
+                  :stats="dashboardStats"
+                  :loading="statsLoading"
+                  :enable-zoom="isPanelActive('stream')"
+                  :fullscreen="isPanelActive('stream')"
+                  @chart-click="handleChartDrillDown"
+                />
+              </FuiCard>
+            </div>
           </n-gi>
 
           <n-gi>
-            <FuiCard :title="categoryDistributionTitle" class="chart-card">
-              <div class="summary-strip">
-                <span>RECORDS <strong class="ticker-value">{{ recordsTicker }}</strong></span>
-                <span>SOURCES <strong class="ticker-value">{{ sourcesTicker }}</strong></span>
-                <span>CAT <strong class="ticker-value">{{ categoriesTicker }}</strong></span>
-              </div>
-              <CategoryDonutChart :stats="dashboardStats" :loading="statsLoading" />
-            </FuiCard>
+            <div ref="categoryPanelRef" class="chart-panel-host">
+              <ChartDrillGuidance
+                :banner-visible="isBannerVisible('category')"
+                :intro-visible="isIntroVisible('category')"
+                banner-text="点击扇区或图例进入分析终端 · Esc 退出"
+                intro-title="分类分布下钻"
+                intro-text="进入全屏后，可点击扇区或图例查看对应维度的分析入口。"
+                @dismiss="dismissIntro('category')"
+              />
+              <FuiCard :title="categoryDistributionTitle" class="chart-card">
+                <template #actions>
+                  <button
+                    class="fui-icon-btn"
+                    :title="isPanelActive('category') ? '退出全屏分类分布图' : '全屏分类分布图'"
+                    @click="toggleChartFullscreen('category')"
+                  >
+                    <MinimizeIcon v-if="isPanelActive('category')" class="btn-icon" />
+                    <MaximizeIcon v-else class="btn-icon" />
+                  </button>
+                </template>
+                <div class="summary-strip">
+                  <span>RECORDS <strong class="ticker-value">{{ recordsTicker }}</strong></span>
+                  <span>SOURCES <strong class="ticker-value">{{ sourcesTicker }}</strong></span>
+                  <span>CAT <strong class="ticker-value">{{ categoriesTicker }}</strong></span>
+                </div>
+                <CategoryDonutChart
+                  :stats="dashboardStats"
+                  :loading="statsLoading"
+                  :fullscreen="isPanelActive('category')"
+                  @chart-click="handleChartDrillDown"
+                />
+              </FuiCard>
+            </div>
           </n-gi>
         </n-grid>
       </n-gi>
     </n-grid>
 
     <NModal
-      :show="fallbackPanelKey === 'topology'"
+      :show="Boolean(fallbackPanelKey)"
       :mask-closable="true"
       :auto-focus="false"
-      @update:show="handleTopologyModalChange"
+      @update:show="handleFullscreenModalChange"
     >
       <div class="topology-modal-wrap">
         <NCard class="topology-modal-card" :bordered="false" embedded>
           <template #header>
-            <span class="topology-modal-title">{{ topologyTitle }}</span>
+            <span class="topology-modal-title">{{ expandedTitle }}</span>
           </template>
           <template #header-extra>
             <NButton
               class="fui-icon-btn"
               quaternary
               circle
-              aria-label="Close topology fullscreen"
+              aria-label="Close fullscreen panel"
               @click="closeTopologyFallback"
             >
               <XIcon class="btn-icon" />
@@ -87,6 +163,66 @@
           </template>
           <div class="topology-modal-content" v-if="fallbackPanelKey === 'topology'">
             <TopologyScene :topology="dashboardStats.topology" />
+          </div>
+          <div class="topology-modal-content" v-else-if="fallbackPanelKey === 'radar'">
+            <div class="expanded-chart-fill">
+              <ChartDrillGuidance
+                :banner-visible="isBannerVisible('radar')"
+                :intro-visible="isIntroVisible('radar')"
+                banner-text="点击图例或高亮区域进入分析终端 · Esc 退出"
+                intro-title="雷达图下钻"
+                intro-text="进入全屏后，可点击图例、高亮区域或峰值进入分析终端。"
+                @dismiss="dismissIntro('radar')"
+              />
+              <ThreatRadarChart
+                :stats="dashboardStats"
+                :loading="statsLoading"
+                :fullscreen="true"
+                @chart-click="handleChartDrillDown"
+              />
+            </div>
+          </div>
+          <div class="topology-modal-content" v-else-if="fallbackPanelKey === 'stream'">
+            <div class="expanded-chart-fill">
+              <ChartDrillGuidance
+                :banner-visible="isBannerVisible('stream')"
+                :intro-visible="isIntroVisible('stream')"
+                banner-text="点击图例或峰值进入分析终端 · Esc 退出"
+                intro-title="日志流下钻"
+                intro-text="进入全屏后，点击图例、柱形峰值或折线高点即可跳转分析终端。"
+                @dismiss="dismissIntro('stream')"
+              />
+              <LogInflowChart
+                :stats="dashboardStats"
+                :loading="statsLoading"
+                :enable-zoom="true"
+                :fullscreen="true"
+                @chart-click="handleChartDrillDown"
+              />
+            </div>
+          </div>
+          <div class="topology-modal-content" v-else>
+            <div class="summary-strip summary-strip--modal">
+              <span>RECORDS <strong class="ticker-value">{{ recordsTicker }}</strong></span>
+              <span>SOURCES <strong class="ticker-value">{{ sourcesTicker }}</strong></span>
+              <span>CAT <strong class="ticker-value">{{ categoriesTicker }}</strong></span>
+            </div>
+            <div class="expanded-chart-fill">
+              <ChartDrillGuidance
+                :banner-visible="isBannerVisible('category')"
+                :intro-visible="isIntroVisible('category')"
+                banner-text="点击扇区或图例进入分析终端 · Esc 退出"
+                intro-title="分类分布下钻"
+                intro-text="进入全屏后，可点击扇区或图例查看对应维度的分析入口。"
+                @dismiss="dismissIntro('category')"
+              />
+              <CategoryDonutChart
+                :stats="dashboardStats"
+                :loading="statsLoading"
+                :fullscreen="true"
+                @chart-click="handleChartDrillDown"
+              />
+            </div>
           </div>
         </NCard>
       </div>
@@ -107,16 +243,23 @@ import {
 } from 'vue-tabler-icons'
 import api from '../api'
 import FuiCard from '../components/FuiCard.vue'
+import ChartDrillGuidance from '../components/layout/ChartDrillGuidance.vue'
 import TopologyScene from '../components/TopologyScene.vue'
 import CategoryDonutChart from '../components/charts/CategoryDonutChart.vue'
 import LogInflowChart from '../components/charts/LogInflowChart.vue'
 import ThreatRadarChart from '../components/charts/ThreatRadarChart.vue'
 import { useDashboardStats } from '../composables/useDashboardStats'
 import { useFullscreenPanel } from '../composables/useFullscreenPanel'
+import { useChartDrillGuidance } from '../composables/useChartDrillGuidance'
 import { useTextScramble } from '../composables/useTextScramble'
+import { useRouter } from 'vue-router'
+import { useChatStore } from '../stores/chatStore'
 
 const isTopologyCollapsed = ref(false)
 const topologyPanelRef = ref(null)
+const radarPanelRef = ref(null)
+const streamPanelRef = ref(null)
+const categoryPanelRef = ref(null)
 // 标题文本由乱码动画驱动，避免直接写死在模板中
 const topologyTitle = ref('GLOBAL ATTACK TOPOLOGY')
 // 图表卡标题响应式状态
@@ -127,7 +270,66 @@ const categoryDistributionTitle = ref('CATEGORY DISTRIBUTION')
 const { dashboardStats, statsLoading } = useDashboardStats(api)
 const { fallbackPanelKey, togglePanel, closeFallbackPanel, isPanelActive } = useFullscreenPanel({
   topology: topologyPanelRef,
+  radar: radarPanelRef,
+  stream: streamPanelRef,
+  category: categoryPanelRef,
 })
+
+const {
+  showGuidance,
+  clearGuidance,
+  dismissIntro,
+  isBannerVisible,
+  isIntroVisible,
+} = useChartDrillGuidance()
+
+watch(
+  () => isPanelActive('radar'),
+  (active) => {
+    if (active) showGuidance('radar')
+    else clearGuidance('radar')
+  },
+)
+
+watch(
+  () => isPanelActive('stream'),
+  (active) => {
+    if (active) showGuidance('stream')
+    else clearGuidance('stream')
+  },
+)
+
+watch(
+  () => isPanelActive('category'),
+  (active) => {
+    if (active) showGuidance('category')
+    else clearGuidance('category')
+  },
+)
+
+const expandedTitle = computed(() => {
+  const titleMap = {
+    topology: topologyTitle.value,
+    radar: threatRadarTitle.value,
+    stream: logIngestStreamTitle.value,
+    category: categoryDistributionTitle.value,
+  }
+  return titleMap[fallbackPanelKey.value] || ''
+})
+
+const router = useRouter()
+const chatStore = useChatStore()
+
+const handleChartDrillDown = (params) => {
+  if (!params.name) return
+  const draftText = `对近期的大盘指标进行下钻分析，当前关注维度/数据点：${params.name}\n请给出相关的态势评估。`
+  chatStore.setSessionDraft(chatStore.currentSession, draftText)
+  router.push({ path: '/chat', query: { autoSend: 'true' } })
+}
+
+const toggleChartFullscreen = (panelKey) => {
+  togglePanel(panelKey)
+}
 
 const summaryTargets = {
   records: ref(0),
@@ -216,7 +418,7 @@ const closeTopologyFallback = () => {
   closeFallbackPanel()
 }
 
-const handleTopologyModalChange = (show) => {
+const handleFullscreenModalChange = (show) => {
   if (!show) {
     closeTopologyFallback()
   }
@@ -267,6 +469,111 @@ const handleTopologyModalChange = (show) => {
   min-height: 0;
   display: flex;
   flex-direction: column;
+}
+
+.chart-panel-host {
+  min-height: 220px;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.chart-panel-host:fullscreen,
+.chart-panel-host:-webkit-full-screen {
+  background: #050814;
+  padding: 0.9rem;
+}
+
+.chart-panel-host:fullscreen .chart-card,
+.chart-panel-host:-webkit-full-screen .chart-card {
+  height: 100%;
+  min-height: 0;
+}
+
+.chart-panel-host:fullscreen .chart-card :deep(.fui-card-body),
+.chart-panel-host:-webkit-full-screen .chart-card :deep(.fui-card-body),
+.chart-panel-host:fullscreen .chart-wrap,
+.chart-panel-host:-webkit-full-screen .chart-wrap,
+.chart-panel-host:fullscreen .chart-canvas,
+.chart-panel-host:-webkit-full-screen .chart-canvas {
+  min-height: 0;
+  height: 100%;
+}
+
+.chart-panel-host:fullscreen .chart-card :deep(.fui-card-header),
+.chart-panel-host:-webkit-full-screen .chart-card :deep(.fui-card-header),
+.topology-panel-host:fullscreen .center-topology-card :deep(.fui-card-header),
+.topology-panel-host:-webkit-full-screen .center-topology-card :deep(.fui-card-header) {
+  min-height: 30px;
+  padding: 0.36rem 0.72rem;
+}
+
+.chart-panel-host:fullscreen .chart-card :deep(.fui-card-title),
+.chart-panel-host:-webkit-full-screen .chart-card :deep(.fui-card-title),
+.topology-panel-host:fullscreen .center-topology-card :deep(.fui-card-title),
+.topology-panel-host:-webkit-full-screen .center-topology-card :deep(.fui-card-title) {
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+}
+
+.chart-panel-host:fullscreen .chart-card :deep(.fui-card-header-right),
+.chart-panel-host:-webkit-full-screen .chart-card :deep(.fui-card-header-right),
+.topology-panel-host:fullscreen .center-topology-card :deep(.fui-card-header-right),
+.topology-panel-host:-webkit-full-screen .center-topology-card :deep(.fui-card-header-right) {
+  gap: 0.24rem;
+}
+
+.chart-panel-host:fullscreen .chart-card :deep(.fui-icon-btn),
+.chart-panel-host:-webkit-full-screen .chart-card :deep(.fui-icon-btn),
+.topology-panel-host:fullscreen .center-topology-card :deep(.fui-icon-btn),
+.topology-panel-host:-webkit-full-screen .center-topology-card :deep(.fui-icon-btn) {
+  width: 22px;
+  height: 22px;
+}
+
+.chart-panel-host:fullscreen .summary-strip,
+.chart-panel-host:-webkit-full-screen .summary-strip {
+  gap: 0.28rem;
+  margin-bottom: 0.38rem;
+}
+
+.chart-panel-host:fullscreen .summary-strip span,
+.chart-panel-host:-webkit-full-screen .summary-strip span {
+  font-size: 0.5rem;
+  padding: 0.1rem 0.3rem;
+}
+
+.topology-modal-card :deep(.n-card-header) {
+  min-height: 40px;
+  padding: 0.4rem 0.85rem;
+}
+
+.topology-modal-card :deep(.n-card__content) {
+  padding-top: 0.45rem;
+}
+
+.topology-modal-title {
+  font-size: 0.66rem;
+  letter-spacing: 0.1em;
+}
+
+.topology-modal-card :deep(.n-card-header-extra) {
+  align-items: center;
+}
+
+.topology-modal-card .summary-strip {
+  gap: 0.28rem;
+  margin-bottom: 0.38rem;
+}
+
+.topology-modal-card .summary-strip span {
+  font-size: 0.5rem;
+  padding: 0.1rem 0.3rem;
+}
+
+.topology-modal-card :deep(.fui-icon-btn) {
+  width: 22px;
+  height: 22px;
 }
 
 .chart-card {
@@ -402,6 +709,25 @@ const handleTopologyModalChange = (show) => {
   flex: 1;
   display: flex;
   flex-direction: column;
+  position: relative;
+}
+
+.expanded-chart-fill {
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.topology-modal-content :deep(.chart-wrap) {
+  min-height: 0;
+  height: 100%;
+}
+
+.topology-modal-content :deep(.chart-canvas) {
+  min-height: 0;
+  height: 100%;
 }
 
 .topology-modal-content :deep(.topology-scene) {

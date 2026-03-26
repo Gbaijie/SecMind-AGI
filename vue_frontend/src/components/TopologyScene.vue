@@ -5,7 +5,12 @@
 -->
 
 <template>
-  <div ref="mountRef" class="topology-scene"></div>
+  <div ref="mountRef" class="topology-scene">
+    <div v-show="tooltip.show" class="topology-tooltip" :style="{ left: tooltip.x + 'px', top: tooltip.y + 'px' }">
+      <div class="tooltip-title">{{ tooltip.title }}</div>
+      <div v-if="tooltip.type" class="tooltip-type">Type: {{ tooltip.type }}</div>
+    </div>
+  </div>
 </template>
 
 <script setup>
@@ -37,6 +42,12 @@ let lastResizeTime = 0
 
 const RESIZE_THROTTLE_MS = 90
 const RESIZE_DEBOUNCE_MS = 180
+
+const tooltip = ref({ show: false, x: 0, y: 0, title: '', type: '' })
+const raycaster = new THREE.Raycaster()
+const mouse = new THREE.Vector2()
+const interactiveMeshes = []
+let hoveredMesh = null
 
 const severityColor = {
   high: 0xff0055,
@@ -90,6 +101,7 @@ const clearNetworkGroup = () => {
 
   pulseNode = null
   linkVectors = []
+  interactiveMeshes.length = 0
   activeLinkIndex = 0
   particleT = 0
 }
@@ -114,7 +126,12 @@ const buildNetwork = () => {
 
   clearNetworkGroup()
 
-  const nodes = props.topology?.nodes || []
+  const MAX_NODES = 400
+  let nodes = props.topology?.nodes || []
+  if (nodes.length > MAX_NODES) {
+    nodes = nodes.slice(0, MAX_NODES)
+  }
+  
   const links = props.topology?.links || []
 
   const usableNodes = nodes.length
@@ -155,6 +172,10 @@ const buildNetwork = () => {
 
     const mesh = new THREE.Mesh(geometry, material)
     mesh.position.copy(pos)
+    
+    mesh.userData = { id: node.id, name: node.name, type: node.type }
+    interactiveMeshes.push(mesh)
+    
     networkGroup.add(mesh)
 
     const glowGeometry = new THREE.SphereGeometry(radius * 1.75, 12, 12)
@@ -258,12 +279,48 @@ const scheduleResize = () => {
   }, RESIZE_DEBOUNCE_MS)
 }
 
+const onPointerMove = (event) => {
+  if (!mountRef.value || !camera) return
+
+  const rect = mountRef.value.getBoundingClientRect()
+  mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1
+  mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1
+
+  // 15px offset for tooltip
+  tooltip.value.x = event.clientX - rect.left + 15
+  tooltip.value.y = event.clientY - rect.top + 15
+}
+
 const animate = () => {
   frameId = requestAnimationFrame(animate)
 
   if (networkGroup) {
     networkGroup.rotation.y += 0.0028
-    networkGroup.rotation.x = Math.sin(Date.now() * 0.00026) * 0.08
+    // networkGroup.rotation.x = Math.sin(Date.now() * 0.00026) * 0.08
+  }
+
+  if (camera && scene && interactiveMeshes.length > 0) {
+    raycaster.setFromCamera(mouse, camera)
+    // Account for group rotation
+    const intersects = raycaster.intersectObjects(interactiveMeshes, false)
+
+    if (intersects.length > 0) {
+      const object = intersects[0].object
+      if (hoveredMesh !== object) {
+        if (hoveredMesh) hoveredMesh.scale.set(1, 1, 1)
+        hoveredMesh = object
+        hoveredMesh.scale.set(1.4, 1.4, 1.4)
+        tooltip.value.show = true
+        tooltip.value.title = object.userData.name || 'Unknown'
+        tooltip.value.type = object.userData.type || ''
+      }
+    } else {
+      if (hoveredMesh) {
+        hoveredMesh.scale.set(1, 1, 1)
+        hoveredMesh = null
+        tooltip.value.show = false
+      }
+    }
   }
 
   if (pulseNode && linkVectors.length > 0) {
@@ -342,6 +399,8 @@ onMounted(() => {
   })
   resizeObserver.observe(mountRef.value)
   scheduleResize()
+  
+  mountRef.value.addEventListener('pointermove', onPointerMove)
 
   animate()
 })
@@ -355,6 +414,10 @@ watch(
 )
 
 onBeforeUnmount(() => {
+  if (mountRef.value) {
+    mountRef.value.removeEventListener('pointermove', onPointerMove)
+  }
+
   if (resizeObserver) {
     resizeObserver.disconnect()
     resizeObserver = null
@@ -399,6 +462,34 @@ onBeforeUnmount(() => {
   background: radial-gradient(circle at 50% 45%, rgba(0, 229, 255, 0.05), transparent 68%);
   overflow: hidden; 
   position: relative;
+}
+
+.topology-tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: rgba(5, 8, 20, 0.92);
+  border: 1px solid rgba(0, 229, 255, 0.35);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  padding: 8px 12px;
+  border-radius: 4px;
+  color: #d8f5ff;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  z-index: 10;
+  transform: translate(0, 0);
+  white-space: nowrap;
+}
+
+.tooltip-title {
+  font-weight: 700;
+  margin-bottom: 4px;
+  color: #00e5ff;
+}
+
+.tooltip-type {
+  color: #7ba7bc;
+  font-size: 0.6rem;
+  text-transform: uppercase;
 }
 
 .topology-scene :deep(canvas) {

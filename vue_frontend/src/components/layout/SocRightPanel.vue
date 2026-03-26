@@ -23,7 +23,20 @@
             </svg>
           </button>
         </template>
-        <ThreatRadarChart :stats="dashboardStats" :loading="statsLoading" />
+        <ChartDrillGuidance
+          :banner-visible="isBannerVisible('radar')"
+          :intro-visible="isIntroVisible('radar')"
+          banner-text="点击图例或高亮区域进入分析终端 · Esc 退出"
+          intro-title="雷达图下钻"
+          intro-text="进入全屏后，可点击图例、高亮区域或峰值进入分析终端。"
+          @dismiss="dismissIntro('radar')"
+        />
+        <ThreatRadarChart
+          :stats="dashboardStats"
+          :loading="statsLoading"
+          :fullscreen="isPanelActive('radar')"
+          @chart-click="handleChartDrillDown"
+        />
       </FuiCard>
     </div>
 
@@ -44,7 +57,21 @@
             </svg>
           </button>
         </template>
-        <LogInflowChart :stats="dashboardStats" :loading="statsLoading" />
+        <ChartDrillGuidance
+          :banner-visible="isBannerVisible('stream')"
+          :intro-visible="isIntroVisible('stream')"
+          banner-text="点击图例或峰值进入分析终端 · Esc 退出"
+          intro-title="日志流下钻"
+          intro-text="进入全屏后，点击图例、柱形峰值或折线高点即可跳转分析终端。"
+          @dismiss="dismissIntro('stream')"
+        />
+        <LogInflowChart
+          :stats="dashboardStats"
+          :loading="statsLoading"
+          :enable-zoom="isPanelActive('stream')"
+          :fullscreen="isPanelActive('stream')"
+          @chart-click="handleChartDrillDown"
+        />
       </FuiCard>
     </div>
 
@@ -70,7 +97,20 @@
           <span>SOURCES {{ dashboardStats.summary?.total_sources || 0 }}</span>
           <span>CAT {{ dashboardStats.summary?.total_categories || 0 }}</span>
         </div>
-        <CategoryDonutChart :stats="dashboardStats" :loading="statsLoading" />
+        <ChartDrillGuidance
+          :banner-visible="isBannerVisible('category')"
+          :intro-visible="isIntroVisible('category')"
+          banner-text="点击扇区或图例进入分析终端 · Esc 退出"
+          intro-title="分类分布下钻"
+          intro-text="进入全屏后，可点击扇区或图例查看对应维度的分析入口。"
+          @dismiss="dismissIntro('category')"
+        />
+        <CategoryDonutChart
+          :stats="dashboardStats"
+          :loading="statsLoading"
+          :fullscreen="isPanelActive('category')"
+          @chart-click="handleChartDrillDown"
+        />
       </FuiCard>
     </div>
   </div>
@@ -94,11 +134,38 @@
         </template>
 
         <div class="expanded-chart-content" v-if="fallbackPanelKey === 'radar'">
-          <ThreatRadarChart :stats="dashboardStats" :loading="statsLoading" />
+          <ThreatRadarChart
+            :stats="dashboardStats"
+            :loading="statsLoading"
+            :fullscreen="true"
+            @chart-click="handleChartDrillDown"
+          />
+          <ChartDrillGuidance
+            :banner-visible="isBannerVisible('radar')"
+            :intro-visible="isIntroVisible('radar')"
+            banner-text="点击图例或高亮区域进入分析终端 · Esc 退出"
+            intro-title="雷达图下钻"
+            intro-text="进入全屏后，可点击图例、高亮区域或峰值进入分析终端。"
+            @dismiss="dismissIntro('radar')"
+          />
         </div>
 
         <div class="expanded-chart-content" v-else-if="fallbackPanelKey === 'stream'">
-          <LogInflowChart :stats="dashboardStats" :loading="statsLoading" />
+          <LogInflowChart
+            :stats="dashboardStats"
+            :loading="statsLoading"
+            :enable-zoom="true"
+            :fullscreen="true"
+            @chart-click="handleChartDrillDown"
+          />
+          <ChartDrillGuidance
+            :banner-visible="isBannerVisible('stream')"
+            :intro-visible="isIntroVisible('stream')"
+            banner-text="点击图例或峰值进入分析终端 · Esc 退出"
+            intro-title="日志流下钻"
+            intro-text="进入全屏后，点击图例、柱形峰值或折线高点即可跳转分析终端。"
+            @dismiss="dismissIntro('stream')"
+          />
         </div>
 
         <div class="expanded-chart-content" v-else>
@@ -108,7 +175,20 @@
             <span>CAT {{ dashboardStats.summary?.total_categories || 0 }}</span>
           </div>
           <div class="expanded-chart-fill">
-            <CategoryDonutChart :stats="dashboardStats" :loading="statsLoading" />
+            <CategoryDonutChart
+              :stats="dashboardStats"
+              :loading="statsLoading"
+              :fullscreen="true"
+              @chart-click="handleChartDrillDown"
+            />
+            <ChartDrillGuidance
+              :banner-visible="isBannerVisible('category')"
+              :intro-visible="isIntroVisible('category')"
+              banner-text="点击扇区或图例进入分析终端 · Esc 退出"
+              intro-title="分类分布下钻"
+              intro-text="进入全屏后，可点击扇区或图例查看对应维度的分析入口。"
+              @dismiss="dismissIntro('category')"
+            />
           </div>
         </div>
       </NCard>
@@ -117,14 +197,17 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { NButton, NCard, NModal } from 'naive-ui'
 import { XIcon } from 'vue-tabler-icons'
 import FuiCard from '../FuiCard.vue'
+import ChartDrillGuidance from './ChartDrillGuidance.vue'
 import LogInflowChart from '../charts/LogInflowChart.vue'
 import ThreatRadarChart from '../charts/ThreatRadarChart.vue'
 import CategoryDonutChart from '../charts/CategoryDonutChart.vue'
+import { useChatStore } from '../../stores/chatStore'
 import { useFullscreenPanel } from '../../composables/useFullscreenPanel'
+import { useChartDrillGuidance } from '../../composables/useChartDrillGuidance'
 
 defineProps({
   dashboardStats: { type: Object, default: () => ({}) },
@@ -135,11 +218,46 @@ const radarPanelRef = ref(null)
 const streamPanelRef = ref(null)
 const categoryPanelRef = ref(null)
 
+const router = useRouter()
+const chatStore = useChatStore()
+
 const { fallbackPanelKey, togglePanel, closeFallbackPanel, isPanelActive } = useFullscreenPanel({
   radar: radarPanelRef,
   stream: streamPanelRef,
   category: categoryPanelRef,
 })
+
+const {
+  showGuidance,
+  clearGuidance,
+  dismissIntro,
+  isBannerVisible,
+  isIntroVisible,
+} = useChartDrillGuidance()
+
+watch(
+  () => isPanelActive('radar'),
+  (active) => {
+    if (active) showGuidance('radar')
+    else clearGuidance('radar')
+  },
+)
+
+watch(
+  () => isPanelActive('stream'),
+  (active) => {
+    if (active) showGuidance('stream')
+    else clearGuidance('stream')
+  },
+)
+
+watch(
+  () => isPanelActive('category'),
+  (active) => {
+    if (active) showGuidance('category')
+    else clearGuidance('category')
+  },
+)
 
 const expandedTitle = computed(() => {
   const titleMap = {
@@ -156,6 +274,14 @@ const toggleChartPanel = (panelKey) => {
 
 const closeExpanded = () => {
   closeFallbackPanel()
+}
+
+const handleChartDrillDown = (params) => {
+  if (!params.name) return
+  const draftText = `对近期的大盘指标进行下钻分析，当前关注维度/数据点：${params.name}\n请给出相关的态势评估。`
+  chatStore.setSessionDraft(chatStore.currentSession, draftText)
+  router.push({ path: '/chat', query: { autoSend: 'true' } })
+  closeExpanded()
 }
 
 const handleModalVisibleChange = (show) => {
@@ -177,6 +303,7 @@ const handleModalVisibleChange = (show) => {
   min-height: 0;
   display: flex;
   flex-direction: column;
+  position: relative;
 }
 
 .chart-card {
@@ -302,6 +429,7 @@ const handleModalVisibleChange = (show) => {
   height: 100%;
   display: flex;
   flex-direction: column;
+  position: relative;
 }
 
 .expanded-chart-fill {
@@ -309,6 +437,7 @@ const handleModalVisibleChange = (show) => {
   flex: 1;
   display: flex;
   flex-direction: column;
+  position: relative;
 }
 
 .chart-modal-card :deep(.chart-wrap) {

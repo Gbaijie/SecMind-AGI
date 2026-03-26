@@ -27,7 +27,8 @@
         :messages="messages"
         :loading="loading"
         :error="error"
-        :on-send-message="handleSendMessage"
+        :entry-hint="drilldownHint"
+        :on-send-message="handleSendMessageWithHintClear"
         :on-regenerate="handleRegenerate"
         :on-edit-message="handleEditMessage"
         :messages-container-ref="messagesContainerRef"
@@ -38,7 +39,9 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
+import { nextTick, onMounted, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { useChatStore } from '../stores/chatStore'
 import { NLayout, NLayoutContent, NLayoutSider } from 'naive-ui'
 import api from '../api'
 import SocSidebar from '../components/layout/SocSidebar.vue'
@@ -47,6 +50,10 @@ import ChatTerminal from './Chat.vue'
 
 const messagesContainerRef = ref(null)
 const chatInputRef = ref(null)
+const route = useRoute()
+const router = useRouter()
+const chatStore = useChatStore()
+const drilldownHint = ref('')
 
 const {
   searchQuery,
@@ -69,8 +76,26 @@ const {
   chatInputRef,
 })
 
-onMounted(() => {
-  initializeChatSession()
+const handleSendMessageWithHintClear = (...args) => {
+  drilldownHint.value = ''
+  return handleSendMessage(...args)
+}
+
+onMounted(async () => {
+  await initializeChatSession()
+
+  if (route.query.autoSend === 'true') {
+    const draftText = chatStore.draftInputs?.[currentSession.value]
+    if (draftText && draftText.trim()) {
+      const normalizedDraft = draftText.trim()
+      chatInputRef.value?.setContent(normalizedDraft)
+      drilldownHint.value = '已预填看板下钻问题，可直接编辑后发送。'
+      await nextTick()
+      chatInputRef.value?.focus()
+      // 移除 url 中的 autoSend 参数，避免刷新后重复显示入口状态
+      router.replace({ query: { ...route.query, autoSend: undefined } })
+    }
+  }
 })
 </script>
 

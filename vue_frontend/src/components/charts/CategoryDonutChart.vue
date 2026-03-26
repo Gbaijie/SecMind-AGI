@@ -19,6 +19,10 @@ const props = defineProps({
     type: Object,
     default: () => ({}),
   },
+  fullscreen: {
+    type: Boolean,
+    default: false,
+  },
   loading: {
     type: Boolean,
     default: false,
@@ -28,6 +32,7 @@ const props = defineProps({
 const colorPool = ['#00e5ff', '#00ff9d', '#7b2cbf', '#ff0055', '#ff6a00', '#89a6ff', '#47d3ff']
 
 const buildOption = () => {
+  const fullscreen = props.fullscreen
 
   const categories = (props.stats?.category_counts || []).slice(0, 7)
 
@@ -37,26 +42,31 @@ const buildOption = () => {
       trigger: 'item',
       backgroundColor: 'rgba(5,8,20,0.92)',
       borderColor: 'rgba(0,229,255,0.35)',
-      textStyle: { color: '#d8f5ff', fontFamily: 'Roboto Mono', fontSize: 11 },
+      textStyle: { color: '#d8f5ff', fontFamily: 'Roboto Mono', fontSize: fullscreen ? 10 : 11 },
     },
     legend: {
-      orient: 'vertical',
-      right: 6,
-      top: 'center',
-      itemWidth: 8,
-      itemHeight: 8,
+      orient: fullscreen ? 'horizontal' : 'vertical',
+      left: fullscreen ? 'center' : 'auto',
+      right: fullscreen ? 'auto' : 6,
+      top: fullscreen ? 'auto' : 'center',
+      bottom: fullscreen ? 10 : 'auto',
+      width: fullscreen ? '84%' : 'auto',
+      itemWidth: fullscreen ? 6 : 8,
+      itemHeight: fullscreen ? 6 : 8,
+      itemGap: fullscreen ? 12 : 8,
+      icon: 'circle',
       textStyle: {
         color: '#7ba7bc',
         fontFamily: 'Roboto Mono',
-        fontSize: 10,
+        fontSize: fullscreen ? 9 : 10,
       },
     },
     series: [
       {
         name: 'Category',
         type: 'pie',
-        radius: ['34%', '68%'],
-        center: ['34%', '52%'],
+        radius: fullscreen ? ['36%', '72%'] : ['34%', '68%'],
+        center: fullscreen ? ['43%', '52%'] : ['34%', '52%'],
         avoidLabelOverlap: true,
         label: {
           show: false,
@@ -87,17 +97,25 @@ const buildOption = () => {
             style: {
               text: 'NO CATEGORY DATA',
               fill: '#6f95a9',
-              font: '12px Roboto Mono',
+              font: fullscreen ? '11px Roboto Mono' : '12px Roboto Mono',
             },
           },
         ],
   }
 }
 
+const emit = defineEmits(['chart-click'])
+
 const { chartRef } = useEcharts(buildOption, () => props.stats, {
   deep: false,
   throttleMs: 90,
   debounceMs: 180,
+  onClick: (params) => {
+    // 过滤掉因为点击非数据区域触发的无用事件
+    if (params.name) {
+      emit('chart-click', params)
+    }
+  }
 })
 </script>
 
@@ -126,5 +144,11 @@ const { chartRef } = useEcharts(buildOption, () => props.stats, {
   font-size: 0.64rem;
   letter-spacing: 0.14em;
   text-transform: uppercase;
+  animation: pulse-mask 1.5s infinite ease-in-out;
+}
+
+@keyframes pulse-mask {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
 }
 </style>

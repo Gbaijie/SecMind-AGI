@@ -20,6 +20,14 @@ const props = defineProps({
     type: Object,
     default: () => ({}),
   },
+  enableZoom: {
+    type: Boolean,
+    default: false,
+  },
+  fullscreen: {
+    type: Boolean,
+    default: false,
+  },
   loading: {
     type: Boolean,
     default: false,
@@ -27,6 +35,8 @@ const props = defineProps({
 })
 
 const buildOption = () => {
+  const zoomEnabled = props.enableZoom
+  const fullscreen = props.fullscreen
 
   const sourceSeries = (props.stats?.source_counts || []).slice(0, 8)
   const timeline = (props.stats?.timeline || []).slice(-8)
@@ -41,9 +51,39 @@ const buildOption = () => {
   return {
     backgroundColor: 'transparent',
     grid: [
-      { left: 36, right: 10, top: 28, height: '40%' },
-      { left: 36, right: 10, bottom: 24, height: '32%' },
+      {
+        left: fullscreen ? 28 : 36,
+        right: 10,
+        top: fullscreen ? 22 : 28,
+        height: zoomEnabled ? (fullscreen ? '40%' : '34%') : (fullscreen ? '44%' : '40%'),
+      },
+      {
+        left: fullscreen ? 28 : 36,
+        right: 10,
+        bottom: zoomEnabled ? (fullscreen ? 30 : 36) : (fullscreen ? 20 : 18),
+        height: zoomEnabled ? (fullscreen ? '30%' : '28%') : (fullscreen ? '32%' : '34%'),
+      },
     ],
+    dataZoom: zoomEnabled
+      ? [
+          {
+            type: 'inside',
+            xAxisIndex: [0, 1],
+            start: 0,
+            end: 100,
+          },
+          {
+            type: 'slider',
+            xAxisIndex: [0, 1],
+            bottom: 0,
+            height: 12,
+            borderColor: 'rgba(0, 229, 255, 0.2)',
+            fillerColor: 'rgba(0, 229, 255, 0.3)',
+            handleStyle: { color: '#00e5ff' },
+            textStyle: { color: '#7ba7bc' },
+          },
+        ]
+      : [],
     tooltip: {
       trigger: 'axis',
       backgroundColor: 'rgba(5, 8, 20, 0.92)',
@@ -51,7 +91,7 @@ const buildOption = () => {
       textStyle: {
         color: '#d8f5ff',
         fontFamily: 'Roboto Mono',
-        fontSize: 11,
+          fontSize: fullscreen ? 10 : 11,
       },
     },
     xAxis: [
@@ -63,9 +103,9 @@ const buildOption = () => {
         axisLabel: {
           color: '#7ba7bc',
           fontFamily: 'Roboto Mono',
-          fontSize: 10,
+          fontSize: fullscreen ? 9 : 10,
           interval: 0,
-          rotate: 20,
+          rotate: fullscreen ? 12 : 20,
         },
       },
       {
@@ -76,7 +116,7 @@ const buildOption = () => {
         axisLabel: {
           color: '#63879d',
           fontFamily: 'Roboto Mono',
-          fontSize: 9,
+          fontSize: fullscreen ? 8 : 9,
         },
       },
     ],
@@ -105,7 +145,7 @@ const buildOption = () => {
         xAxisIndex: 0,
         yAxisIndex: 0,
         data: values,
-        barMaxWidth: 16,
+        barMaxWidth: fullscreen ? 18 : 16,
         itemStyle: {
           borderRadius: [2, 2, 0, 0],
           color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
@@ -143,17 +183,20 @@ const buildOption = () => {
             style: {
               text: 'NO LOG DATA',
               fill: '#6f95a9',
-              font: '12px Roboto Mono',
+              font: fullscreen ? '11px Roboto Mono' : '12px Roboto Mono',
             },
           },
         ],
   }
 }
 
+const emit = defineEmits(['chart-click'])
+
 const { chartRef } = useEcharts(buildOption, () => props.stats, {
   deep: false,
   throttleMs: 90,
   debounceMs: 180,
+  onClick: (params) => emit('chart-click', params)
 })
 </script>
 
@@ -182,5 +225,11 @@ const { chartRef } = useEcharts(buildOption, () => props.stats, {
   font-size: 0.65rem;
   letter-spacing: 0.15em;
   text-transform: uppercase;
+  animation: pulse-mask 1.5s infinite ease-in-out;
+}
+
+@keyframes pulse-mask {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
 }
 </style>

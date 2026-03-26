@@ -19,6 +19,10 @@ const props = defineProps({
     type: Object,
     default: () => ({}),
   },
+  fullscreen: {
+    type: Boolean,
+    default: false,
+  },
   loading: {
     type: Boolean,
     default: false,
@@ -26,6 +30,7 @@ const props = defineProps({
 })
 
 const buildOption = () => {
+  const fullscreen = props.fullscreen
 
   const threat = props.stats?.threat_distribution || []
   const high = threat.find((item) => item.level === 'high')?.value || 0
@@ -41,20 +46,22 @@ const buildOption = () => {
       trigger: 'item',
       backgroundColor: 'rgba(5,8,20,0.92)',
       borderColor: 'rgba(0,229,255,0.35)',
-      textStyle: { color: '#d8f5ff', fontFamily: 'Roboto Mono', fontSize: 11 },
+      textStyle: { color: '#d8f5ff', fontFamily: 'Roboto Mono', fontSize: fullscreen ? 10 : 11 },
     },
     radar: {
-      center: ['50%', '54%'],
-      radius: '68%',
-      splitNumber: 5,
+      center: fullscreen ? ['50%', '55%'] : ['50%', '54%'],
+      radius: fullscreen ? '74%' : '68%',
+      splitNumber: fullscreen ? 4 : 5,
       axisName: {
         color: '#7ba7bc',
         fontFamily: 'Roboto Mono',
-        fontSize: 10,
+        fontSize: fullscreen ? 9 : 10,
       },
       splitArea: {
         areaStyle: {
-          color: ['rgba(0,229,255,0.02)', 'rgba(0,229,255,0.04)'],
+          color: fullscreen
+            ? ['rgba(0,229,255,0.03)', 'rgba(0,229,255,0.06)']
+            : ['rgba(0,229,255,0.02)', 'rgba(0,229,255,0.04)'],
         },
       },
       axisLine: { lineStyle: { color: 'rgba(0,229,255,0.25)' } },
@@ -99,17 +106,20 @@ const buildOption = () => {
             style: {
               text: 'NO THREAT DATA',
               fill: '#6f95a9',
-              font: '12px Roboto Mono',
+              font: fullscreen ? '11px Roboto Mono' : '12px Roboto Mono',
             },
           },
         ],
   }
 }
 
+const emit = defineEmits(['chart-click'])
+
 const { chartRef } = useEcharts(buildOption, () => props.stats, {
   deep: false,
   throttleMs: 90,
   debounceMs: 180,
+  onClick: (params) => emit('chart-click', params)
 })
 </script>
 
@@ -138,5 +148,11 @@ const { chartRef } = useEcharts(buildOption, () => props.stats, {
   font-size: 0.64rem;
   letter-spacing: 0.14em;
   text-transform: uppercase;
+  animation: pulse-mask 1.5s infinite ease-in-out;
+}
+
+@keyframes pulse-mask {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
 }
 </style>

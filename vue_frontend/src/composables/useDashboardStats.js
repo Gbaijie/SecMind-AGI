@@ -4,7 +4,7 @@
  * 主要数据流：组件触发 -> 统计请求 -> dashboardStats
  */
 
-import { onMounted, ref, shallowRef } from 'vue'
+import { onMounted, onUnmounted, ref, shallowRef } from 'vue'
 
 const DEFAULT_STATS = {
   summary: {},
@@ -15,31 +15,56 @@ const DEFAULT_STATS = {
   topology: { nodes: [], links: [] },
 }
 
-export function useDashboardStats(apiClient) {
+export function useDashboardStats(apiClient, pollIntervalMs = 60000) {
   // 使用 shallowRef 避免深层代理开销
   const dashboardStats = shallowRef({ ...DEFAULT_STATS })
   const statsLoading = ref(false)
   let inFlight = false
+  let pollTimer = null
 
-  const loadDashboardStats = async () => {
+  const loadDashboardStats = async (isBackground = false) => {
     if (inFlight) return
 
     inFlight = true
-    statsLoading.value = true
+    if (!isBackground) {
+      statsLoading.value = true
+    }
 
-    await apiClient.getDashboardStats()
-      .then((response) => {
-        dashboardStats.value = response?.data || { ...DEFAULT_STATS }
-      })
-      .finally(() => {
-        inFlight = false
+    try {
+      const response = await apiClient.getDashboardStats()
+      dashboardStats.value = response?.data || { ...DEFAULT_STATS }
+    } catch (e) {
+      console.warn('Failed to load dashboard stats:', e)
+    } finally {
+      inFlight = false
+      if (!isBackground) {
         statsLoading.value = false
-      })
+      }
+    }
+  }
+
+  const startPolling = () => {
+    if (pollIntervalMs <= 0) return
+    stopPolling()
+    pollTimer = setInterval(() => {
+      loadDashboardStats(true)
+    }, pollIntervalMs)
+  }
+
+  const stopPolling = () => {
+    if (pollTimer) {
+      clearInterval(pollTimer)
+      pollTimer = null
+    }
   }
 
   onMounted(() => {
-    // 组件挂载时仅执行一次，不再设置 setInterval 定时器
     loadDashboardStats()
+    startPolling()
+  })
+
+  onUnmounted(() => {
+    stopPolling()
   })
 
   return {

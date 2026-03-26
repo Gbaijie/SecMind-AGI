@@ -10,7 +10,7 @@ import { onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } fr
 export function useEcharts(
   buildOption,
   watchSource,
-  { deep = true, throttleMs = 80, debounceMs = 160, viewportThreshold = 0.05 } = {},
+  { deep = true, throttleMs = 80, debounceMs = 160, viewportThreshold = 0.05, onClick = null } = {},
 ) {
   const chartRef = ref(null)
   let chart = null
@@ -107,6 +107,11 @@ export function useEcharts(
     if (!chartRef.value || chart) return
 
     chart = echarts.init(chartRef.value)
+
+    if (onClick) {
+      chart.on('click', onClick)
+    }
+
     setupIntersectionObserver()
 
     resizeObserver = new ResizeObserver(() => {

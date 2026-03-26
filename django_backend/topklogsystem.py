@@ -376,29 +376,100 @@ class TopKLogSystem:
 
         return True
 
-    def retrieve(
+    @staticmethod
+    def _extract_query_signals(query: str) -> Dict[str, List[str]]:
+        cve_ids = sorted({match.upper() for match in re.findall(r"CVE-\d{4}-\d+", query, flags=re.IGNORECASE)})
+        ip_addresses = sorted({match for match in re.findall(r"\b\d{1,3}(?:\.\d{1,3}){3}\b", query)})
+        hashes = sorted({match.lower() for match in re.findall(r"\b[a-fA-F0-9]{32}\b|\b[a-fA-F0-9]{40}\b|\b[a-fA-F0-9]{64}\b", query)})
+        mitre_ids = sorted({match.upper() for match in re.findall(r"T\d{4}(?:\.\d{3})?", query, flags=re.IGNORECASE)})
+
+        exact_terms = sorted({*{item.lower() for item in cve_ids}, *{item.lower() for item in ip_addresses}, *hashes, *{item.lower() for item in mitre_ids}})
+
+        return {
+            "cve_ids": cve_ids,
+            "ip_addresses": ip_addresses,
+            "hashes": hashes,
+            "mitre_ids": mitre_ids,
+            "exact_terms": exact_terms,
+        }
+
+    @staticmethod
+    def _deserialize_metadata_list(raw_value: Any) -> List[str]:
+        if raw_value is None:
+            return []
+        if isinstance(raw_value, list):
+            return [str(item).strip() for item in raw_value if str(item).strip()]
+        if isinstance(raw_value, str):
+            return [item.strip() for item in re.split(r"[;,]", raw_value) if item.strip()]
+        return []
+
+    @staticmethod
+    def _build_searchable_text(text: str, metadata: Dict[str, Any]) -> str:
+        parts = [text]
+        for key in (
+            "db_type",
+            "risk_level",
+            "cve_id",
+            "ioc_value",
+            "source",
+            "raw_content_hash",
+            "record_file",
+            "record_line",
+            "mitre_attack_id",
+            "tags",
+        ):
+            value = metadata.get(key)
+            if value is not None:
+                parts.append(str(value))
+        return " ".join(parts).lower()
+
+    def _score_keyword_match(
+        self,
+        text: str,
+        metadata: Dict[str, Any],
+        query_terms: List[str],
+        exact_terms: List[str],
+    ) -> float:
+        searchable_text = self._build_searchable_text(text, metadata)
+
+        exact_hit_count = 0
+        exact_metadata_values = [
+            str(metadata.get("cve_id") or "").strip().lower(),
+            str(metadata.get("ioc_value") or "").strip().lower(),
+            str(metadata.get("raw_content_hash") or "").strip().lower(),
+            str(metadata.get("source") or "").strip().lower(),
+        ]
+        exact_metadata_values.extend(item.lower() for item in self._deserialize_metadata_list(metadata.get("mitre_attack_id")))
+
+        for term in exact_terms:
+            if not term:
+                continue
+            if term in searchable_text or term in exact_metadata_values:
+                exact_hit_count += 1
+
+        token_hits = sum(1 for term in query_terms if term and term in searchable_text)
+
+        if exact_hit_count:
+            return min(1.0, 0.72 + exact_hit_count * 0.12 + min(token_hits, 4) * 0.04)
+        if token_hits == 0:
+            return 0.0
+        return min(0.65, 0.18 * token_hits)
+
+    def _collect_candidates(
         self,
         query: str,
-        top_k: int = 10,
-        use_keyword: bool = True,
-        filters: Optional[Dict[str, Any]] = None,
-    ) -> List[Dict[str, Any]]:
-        """
-        统一检索接口：意图短路精准识别 -> 召回(向量+关键词) -> 重排(结构化字段加权) -> 去重(raw_content_hash)。
-        """
-        if not self.log_index:
-            return []
-
-        # 核心改动 1：提前正则提取目标意图，用于后续的绝对一票否决权或保送
-        query_cve = re.search(r'(?i)CVE-\d{4}-\d+', query)
-        cve_target = query_cve.group(0).upper() if query_cve else None
-
-        query_ip = re.search(r'\b\d{1,3}(?:\.\d{1,3}){3}\b', query)
-        ip_target = query_ip.group(0) if query_ip else None
+        top_k: int,
+        use_keyword: bool,
+        filters: Optional[Dict[str, Any]],
+        vector_floor: float,
+        keyword_floor: float,
+    ) -> tuple[Dict[str, Dict[str, Any]], Dict[str, List[str]]]:
+        query_signals = self._extract_query_signals(query)
+        query_terms = self._build_query_terms(query)
+        candidate_map: Dict[str, Dict[str, Any]] = {}
 
         retriever = self.log_index.as_retriever(similarity_top_k=max(top_k * 4, 20))
         vector_hits = retriever.retrieve(query)
-        candidate_map: Dict[str, Dict[str, Any]] = {}
 
         def _candidate_key(text: str, metadata: Dict[str, Any]) -> str:
             return str(metadata.get("raw_content_hash") or metadata.get("_id") or text)
@@ -412,8 +483,11 @@ class TopKLogSystem:
             if not self._matches_filters(metadata, filters):
                 continue
 
-            key = _candidate_key(text, metadata)
             vector_score = float(getattr(node, "score", 0.0) or 0.0)
+            if vector_score < vector_floor:
+                continue
+
+            key = _candidate_key(text, metadata)
             item = candidate_map.setdefault(
                 key,
                 {
@@ -428,7 +502,6 @@ class TopKLogSystem:
             item["channels"].add("vector")
 
         if use_keyword and hasattr(self.log_index, "docstore"):
-            query_terms = self._build_query_terms(query)
             all_docs = self.log_index.docstore.docs.values()
 
             for doc in all_docs:
@@ -440,12 +513,10 @@ class TopKLogSystem:
                 if not self._matches_filters(metadata, filters):
                     continue
 
-                haystack = text.lower()
-                hit_count = sum(1 for term in query_terms if term in haystack)
-                if hit_count == 0:
+                keyword_score = self._score_keyword_match(text, metadata, query_terms, query_signals["exact_terms"])
+                if keyword_score < keyword_floor:
                     continue
 
-                keyword_score = min(1.0, 0.55 + 0.1 * hit_count)
                 key = _candidate_key(text, metadata)
                 item = candidate_map.setdefault(
                     key,
@@ -460,6 +531,13 @@ class TopKLogSystem:
                 item["keyword_score"] = max(item["keyword_score"], keyword_score)
                 item["channels"].add("keyword")
 
+        return candidate_map, query_signals
+
+    @staticmethod
+    def _rank_candidates(
+        candidate_map: Dict[str, Dict[str, Any]],
+        query_signals: Dict[str, List[str]],
+    ) -> List[Dict[str, Any]]:
         risk_weight = {
             "Critical": 1.0,
             "High": 0.85,
@@ -471,27 +549,26 @@ class TopKLogSystem:
 
         for item in candidate_map.values():
             metadata = item["metadata"]
-            
-            # 核心改动 2：意图精准匹配带来降维打击的分数奖励（+1.0）
+            searchable_text = TopKLogSystem._build_searchable_text(item["content"], metadata)
+
             exact_match_boost = 0.0
-            if cve_target and metadata.get("cve_id", "").upper() == cve_target:
-                exact_match_boost = 1.0
-            if ip_target and metadata.get("ioc_value", "") == ip_target:
-                exact_match_boost = 1.0
+            for exact_term in query_signals.get("exact_terms", []):
+                if exact_term and exact_term in searchable_text:
+                    exact_match_boost = 1.0
+                    break
 
             confidence = metadata.get("confidence")
             confidence_norm = 0.0
             if isinstance(confidence, (int, float)):
                 confidence_norm = max(0.0, min(float(confidence), 100.0)) / 100.0
 
-            source_priority = self._normalize_source_priority(
+            source_priority = TopKLogSystem._normalize_source_priority(
                 str(metadata.get("source", "")),
                 metadata.get("source_priority"),
             )
-            risk_level = self._normalize_risk_level(metadata.get("risk_level"))
+            risk_level = TopKLogSystem._normalize_risk_level(metadata.get("risk_level"))
             risk_score = risk_weight.get(risk_level, 0.25)
 
-            # 加入强匹配分 exact_match_boost
             final_score = (
                 item["vector_score"] * 0.5
                 + item["keyword_score"] * 0.2
@@ -514,24 +591,197 @@ class TopKLogSystem:
                         "confidence": metadata.get("confidence"),
                         "raw_content_hash": metadata.get("raw_content_hash"),
                     },
+                    "vector_score": round(float(item["vector_score"]), 6),
+                    "keyword_score": round(float(item["keyword_score"]), 6),
+                    "exact_match_boost": exact_match_boost,
                 }
             )
 
         ranked_items.sort(key=lambda x: x["score"], reverse=True)
+        return ranked_items
 
-        deduped: List[Dict[str, Any]] = []
-        seen_keys = set()
+    @staticmethod
+    def _select_group_key(item: Dict[str, Any]) -> tuple[str, str]:
+        metadata = item.get("metadata", {}) or {}
+        cve_id = str(metadata.get("cve_id") or "").strip().upper()
+        if cve_id:
+            return f"cve:{cve_id}", "cve"
+
+        ioc_value = str(metadata.get("ioc_value") or "").strip().lower()
+        if ioc_value:
+            return f"ioc:{ioc_value}", "ioc"
+
+        raw_content_hash = str(metadata.get("raw_content_hash") or "").strip().lower()
+        if raw_content_hash:
+            return f"hash:{raw_content_hash}", "raw_content_hash"
+
+        tags = TopKLogSystem._deserialize_metadata_list(metadata.get("tags"))
+        if tags:
+            return f"attack_type:{tags[0].strip().lower()}", "attack_type"
+
+        db_type = str(metadata.get("db_type") or "unknown").strip().lower()
+        source = str(metadata.get("source") or "unknown").strip().lower()
+        return f"db:{db_type}:{source}", "db_type"
+
+    @staticmethod
+    def _build_prompt_metadata(metadata: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "_id": metadata.get("_id"),
+            "db_type": metadata.get("db_type"),
+            "risk_level": metadata.get("risk_level"),
+            "cve_id": metadata.get("cve_id"),
+            "ioc_value": metadata.get("ioc_value"),
+            "source": metadata.get("source"),
+            "confidence": metadata.get("confidence"),
+            "raw_content_hash": metadata.get("raw_content_hash"),
+            "source_dataset": metadata.get("source_dataset"),
+            "source_priority": metadata.get("source_priority"),
+            "verified": bool(metadata.get("verified", False)),
+            "record_file": metadata.get("record_file"),
+            "record_line": metadata.get("record_line"),
+            "mitre_attack_id": TopKLogSystem._deserialize_metadata_list(metadata.get("mitre_attack_id")),
+            "tags": TopKLogSystem._deserialize_metadata_list(metadata.get("tags")),
+        }
+
+    def _group_retrieval_results(self, ranked_items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        grouped: Dict[str, Dict[str, Any]] = {}
+
         for item in ranked_items:
+            group_key, group_type = self._select_group_key(item)
             metadata = item.get("metadata", {}) or {}
-            dedup_key = metadata.get("raw_content_hash") or metadata.get("_id") or item["content"]
-            if dedup_key in seen_keys:
-                continue
-            seen_keys.add(dedup_key)
-            deduped.append(item)
-            if len(deduped) >= top_k:
-                break
+            prompt_metadata = self._build_prompt_metadata(metadata)
+            tags = prompt_metadata.get("tags", [])
+            mitre_attack_id = prompt_metadata.get("mitre_attack_id", [])
 
-        return deduped
+            group = grouped.setdefault(
+                group_key,
+                {
+                    "group_key": group_key,
+                    "group_type": group_type,
+                    "score": 0.0,
+                    "source": set(),
+                    "members": [],
+                    "entity_summary": {
+                        "cve_id": prompt_metadata.get("cve_id"),
+                        "ioc_values": [],
+                        "raw_content_hashes": [],
+                        "attack_types": [],
+                        "mitre_attack_id": [],
+                    },
+                },
+            )
+
+            group["score"] = max(group["score"], float(item.get("score", 0.0) or 0.0))
+            group["source"].add(item.get("source", "unknown"))
+            group["members"].append(
+                {
+                    "content": item.get("content", ""),
+                    "score": item.get("score", 0.0),
+                    "source": item.get("source", "unknown"),
+                    "vector_score": item.get("vector_score", 0.0),
+                    "keyword_score": item.get("keyword_score", 0.0),
+                    "exact_match_boost": item.get("exact_match_boost", 0.0),
+                    "metadata": prompt_metadata,
+                    "evidence": item.get("evidence", {}),
+                }
+            )
+
+            if prompt_metadata.get("ioc_value"):
+                ioc_value = prompt_metadata["ioc_value"]
+                if ioc_value not in group["entity_summary"]["ioc_values"]:
+                    group["entity_summary"]["ioc_values"].append(ioc_value)
+
+            raw_content_hash = prompt_metadata.get("raw_content_hash")
+            if raw_content_hash and raw_content_hash not in group["entity_summary"]["raw_content_hashes"]:
+                group["entity_summary"]["raw_content_hashes"].append(raw_content_hash)
+
+            for tag in tags:
+                if tag not in group["entity_summary"]["attack_types"]:
+                    group["entity_summary"]["attack_types"].append(tag)
+
+            for attack_id in mitre_attack_id:
+                if attack_id not in group["entity_summary"]["mitre_attack_id"]:
+                    group["entity_summary"]["mitre_attack_id"].append(attack_id)
+
+        grouped_items: List[Dict[str, Any]] = []
+        for group in grouped.values():
+            group["members"].sort(key=lambda x: x.get("score", 0.0), reverse=True)
+            representative = group["members"][0] if group["members"] else {}
+            grouped_items.append(
+                {
+                    "group_key": group["group_key"],
+                    "group_type": group["group_type"],
+                    "score": round(float(group["score"]), 6),
+                    "source": "+".join(sorted(group["source"])) or "hybrid",
+                    "content": representative.get("content", ""),
+                    "metadata": representative.get("metadata", {}),
+                    "evidence": representative.get("evidence", {}),
+                    "member_count": len(group["members"]),
+                    "entity_summary": group["entity_summary"],
+                    "evidence_chain": group["members"],
+                }
+            )
+
+        grouped_items.sort(key=lambda x: x["score"], reverse=True)
+        return grouped_items
+
+    def retrieve(
+        self,
+        query: str,
+        top_k: int = 10,
+        use_keyword: bool = True,
+        filters: Optional[Dict[str, Any]] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        统一检索接口：意图短路精准识别 -> 召回(向量+关键词) -> 重排(结构化字段加权) -> 证据链聚合 -> 去重(raw_content_hash)。
+        """
+        if not self.log_index:
+            return []
+        primary_candidates, query_signals = self._collect_candidates(
+            query=query,
+            top_k=top_k,
+            use_keyword=use_keyword,
+            filters=filters,
+            vector_floor=0.2,
+            keyword_floor=0.22,
+        )
+        ranked_items = self._rank_candidates(primary_candidates, query_signals)
+
+        best_score = ranked_items[0]["score"] if ranked_items else 0.0
+        if not ranked_items or best_score < 0.35:
+            relaxed_candidates, relaxed_signals = self._collect_candidates(
+                query=query,
+                top_k=max(top_k * 8, 40),
+                use_keyword=use_keyword,
+                filters=filters,
+                vector_floor=0.0,
+                keyword_floor=0.08,
+            )
+            relaxed_ranked_items = self._rank_candidates(relaxed_candidates, relaxed_signals)
+
+            relaxed_best_score = relaxed_ranked_items[0]["score"] if relaxed_ranked_items else 0.0
+            if relaxed_ranked_items and (
+                not ranked_items
+                or relaxed_best_score > best_score
+                or len(relaxed_ranked_items) > len(ranked_items)
+            ):
+                ranked_items = relaxed_ranked_items
+
+            if not ranked_items and filters:
+                fallback_candidates, fallback_signals = self._collect_candidates(
+                    query=query,
+                    top_k=max(top_k * 8, 40),
+                    use_keyword=use_keyword,
+                    filters=None,
+                    vector_floor=0.0,
+                    keyword_floor=0.08,
+                )
+                fallback_ranked_items = self._rank_candidates(fallback_candidates, fallback_signals)
+                if fallback_ranked_items:
+                    ranked_items = fallback_ranked_items
+
+        grouped_items = self._group_retrieval_results(ranked_items)
+        return grouped_items[:top_k]
 
     def retrieve_logs(
         self,
@@ -606,29 +856,23 @@ class TopKLogSystem:
             """
         )
 
-        log_context_str = "## [可用工具 1: 日志数据库 (Log DB)]\n"
+        log_context_payload = {
+            "type": "log_evidence_chain",
+            "count": len(log_data),
+            "items": log_data,
+        }
         if not log_data:
-            log_context_str += "（未从日志数据库检索到相关内容）\n"
-        else:
-            for i, log in enumerate(log_data, 1):
-                score = log.get("score", 0.0)
-                metadata = log.get("metadata", {}) or {}
-                db_type = metadata.get("db_type", "unknown")
-                source = metadata.get("source", "unknown")
-                log_context_str += (
-                    f"证据 {i} (Score: {score:.2f}, DB: {db_type}, Source: {source}): "
-                    f"{log['content']}\n"
-                )
+            log_context_payload["note"] = "未从日志数据库检索到相关内容"
+        log_context_str = json.dumps(log_context_payload, ensure_ascii=False, indent=2)
 
-        web_context_str = "## [可用工具 2: 联网搜索 (Web Search)]\n"
+        web_context_payload = {
+            "type": "web_context",
+            "count": len(web_data),
+            "items": web_data,
+        }
         if not web_data:
-            web_context_str += "（未启用或未从联网搜索检索到相关内容）\n"
-        else:
-            for i, web_result in enumerate(web_data, 1):
-                web_context_str += (
-                    f"网页 {i} (Source: {web_result.get('source', 'N/A')}): "
-                    f"{web_result['content']}\n"
-                )
+            web_context_payload["note"] = "未启用或未从联网搜索检索到相关内容"
+        web_context_str = json.dumps(web_context_payload, ensure_ascii=False, indent=2)
 
         user_message_template = HumanMessagePromptTemplate.from_template(
             "{log_context}\n{web_context}\n\n当前用户问题:\n{query}"

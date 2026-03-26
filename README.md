@@ -313,6 +313,19 @@ ollama pull bge-large:latest
 
 后端已完成对统一 JSONL Schema 的结构化接入，不再把整条 JSON 原文粗暴拼接入向量。
 
+### 0. 数据集字段规则（统一 JSON Schema）
+
+当前数据集统一采用 JSON Lines（`.jsonl`）格式，核心要求是“顶层字段稳定、检索字段上浮、长尾字段下沉”。
+
+- 必填字段：`_id`、`db_type`、`search_content`、`source`、`fetched_at`、`raw_content_hash`。
+- 顶层稳定字段：`risk_level`、`mitre_attack_id`、`tags`、`cve_id`、`ioc_value`、`payload`、`affected_product`、`confidence`、`verified`、`source_dataset`、`source_url`、`original_id`、`label_source`。
+- `details` 只用于存放低频长尾信息，禁止把 `cve_id`、`ioc_value`、`payload`、`affected_product` 这类高频关键信息塞回 `details`。
+- `search_content` 是 RAG 向量检索的唯一自然语言输入，必须采用四段式模板：对象、发生、风险、建议，长度控制在 80-200 字。
+- `risk_level` 统一映射为 `Critical`、`High`、`Medium`、`Low`、`Info`，不保留中英文混写状态。
+- `mitre_attack_id` 使用正则 `T\d{4}(?:\.\d{3})?` 统一提取；`tags` 只允许短标签，不允许长句。
+- `Document.metadata` 只能写入标量值，因此列表字段需要先序列化；检索时再按逗号或分号拆回去。
+- 去重键优先使用 `raw_content_hash`，冲突合并时保留来源优先级和置信度信息，便于后续审计和答辩溯源。
+
 ### 1. 文档加载器（Document Loader）升级
 
 - `TopKLogSystem._process_json` 在读取 `.jsonl` 时，仅使用 `search_content` 作为 `Document.text`。
@@ -336,7 +349,12 @@ ollama pull bge-large:latest
 
 同时保留 `retrieve_logs(...)` 作为兼容包装，现已委托到 `retrieve(...)`，不影响现有调用方。
 
-### 3. Dashboard 结构化聚合升级
+### 3. 后端两个文件的改进
+
+- `[django_backend/topklogsystem.py](django_backend/topklogsystem.py)`：检索链路从单纯 Top-K 列表升级为“候选召回 -> 精细重排 -> 证据链聚合 -> 弱命中回退”。现在会按 `cve_id`、`ioc_value`、`raw_content_hash`、`tags` 等维度自动分组，输出 `group_key`、`group_type`、`member_count`、`entity_summary` 和 `evidence_chain`，让 LLM 看到的不是扁平证据，而是可推理的攻击链。
+- `[django_backend/deepseek_api/services.py](django_backend/deepseek_api/services.py)`：OpenAI-compatible 路径与本地 Ollama 路径统一改成 JSON 证据注入，不再只拼接 `content` 文本。现在会把 `db_type`、`risk_level`、`confidence`、`source`、`raw_content_hash`、`record_file`、`record_line`、`mitre_attack_id`、`tags` 等字段一起送入 prompt，确保模型消费的是结构化证据链。
+
+### 4. Dashboard 结构化聚合升级
 
 `deepseek_api/dashboard_stats.py` 已从 CSV 关键词猜测切换为 JSONL 字段聚合：
 

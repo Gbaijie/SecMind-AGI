@@ -1,4 +1,5 @@
 import hashlib
+import json
 import logging
 import os
 import threading
@@ -328,49 +329,85 @@ def _build_openai_messages(
     current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S %A")
     dynamic_system_prompt = f"{SRE_SYSTEM_PROMPT}\n\n[系统环境信息]\n当前系统时间：{current_time}"
 
-    def _format_log_evidence(item: Dict[str, Any], index: int) -> str:
-        score = float(item.get("score", 0.0))
+    def _deserialize_metadata_list(raw_value: Any) -> List[str]:
+        if raw_value is None:
+            return []
+        if isinstance(raw_value, list):
+            return [str(item).strip() for item in raw_value if str(item).strip()]
+        if isinstance(raw_value, str):
+            return [item.strip() for item in raw_value.replace(";", ",").split(",") if item.strip()]
+        return []
+
+    def _normalize_metadata(metadata: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "_id": metadata.get("_id"),
+            "db_type": metadata.get("db_type"),
+            "risk_level": metadata.get("risk_level"),
+            "cve_id": metadata.get("cve_id"),
+            "ioc_value": metadata.get("ioc_value"),
+            "source": metadata.get("source"),
+            "confidence": metadata.get("confidence"),
+            "raw_content_hash": metadata.get("raw_content_hash"),
+            "source_dataset": metadata.get("source_dataset"),
+            "source_priority": metadata.get("source_priority"),
+            "verified": bool(metadata.get("verified", False)),
+            "record_file": metadata.get("record_file"),
+            "record_line": metadata.get("record_line"),
+            "mitre_attack_id": _deserialize_metadata_list(metadata.get("mitre_attack_id")),
+            "tags": _deserialize_metadata_list(metadata.get("tags")),
+        }
+
+    def _normalize_log_item(item: Dict[str, Any]) -> Dict[str, Any]:
         metadata = item.get("metadata", {}) or {}
         evidence = item.get("evidence", {}) or {}
+        evidence_chain = item.get("evidence_chain", []) or []
 
-        parts = [f"日志 {index}", f"Score: {score:.2f}"]
+        return {
+            "group_key": item.get("group_key"),
+            "group_type": item.get("group_type"),
+            "score": item.get("score", 0.0),
+            "source": item.get("source", "unknown"),
+            "content": item.get("content", ""),
+            "metadata": _normalize_metadata(metadata),
+            "evidence": {
+                "db_type": evidence.get("db_type") or metadata.get("db_type"),
+                "risk_level": evidence.get("risk_level") or metadata.get("risk_level"),
+                "source": evidence.get("source") or metadata.get("source"),
+                "confidence": evidence.get("confidence") or metadata.get("confidence"),
+                "raw_content_hash": evidence.get("raw_content_hash") or metadata.get("raw_content_hash"),
+            },
+            "member_count": item.get("member_count", 1),
+            "entity_summary": item.get("entity_summary", {}),
+            "evidence_chain": [
+                {
+                    "content": member.get("content", ""),
+                    "score": member.get("score", 0.0),
+                    "source": member.get("source", "unknown"),
+                    "vector_score": member.get("vector_score", 0.0),
+                    "keyword_score": member.get("keyword_score", 0.0),
+                    "exact_match_boost": member.get("exact_match_boost", 0.0),
+                    "metadata": _normalize_metadata(member.get("metadata", {}) or {}),
+                    "evidence": member.get("evidence", {}),
+                }
+                for member in evidence_chain
+            ],
+        }
 
-        db_type = metadata.get("db_type") or evidence.get("db_type")
-        if db_type:
-            parts.append(f"DB: {db_type}")
+    def _normalize_web_item(item: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "content": item.get("content", ""),
+            "source": item.get("source", "N/A"),
+        }
 
-        risk_level = metadata.get("risk_level") or evidence.get("risk_level")
-        if risk_level:
-            parts.append(f"Risk: {risk_level}")
-
-        confidence = metadata.get("confidence") or evidence.get("confidence")
-        if confidence is not None:
-            parts.append(f"Confidence: {confidence}")
-
-        source = metadata.get("source") or evidence.get("source")
-        if source:
-            parts.append(f"Source: {source}")
-
-        raw_content_hash = metadata.get("raw_content_hash") or evidence.get("raw_content_hash")
-        if raw_content_hash:
-            parts.append(f"Hash: {raw_content_hash}")
-
-        record_file = metadata.get("record_file")
-        if record_file:
-            record_line = metadata.get("record_line")
-            location = f"{record_file}:{record_line}" if record_line is not None else record_file
-            parts.append(f"Location: {location}")
-
-        mitre_attack_id = metadata.get("mitre_attack_id")
-        if mitre_attack_id:
-            parts.append(f"MITRE: {mitre_attack_id}")
-
-        tags = metadata.get("tags")
-        if tags:
-            parts.append(f"Tags: {tags}")
-
-        content = item.get("content", "")
-        return f"{' | '.join(parts)}\n内容: {content}"
+    def _format_structured_payload(items: List[Dict[str, Any]], payload_type: str) -> str:
+        payload = {
+            "type": payload_type,
+            "count": len(items),
+            "items": items,
+        }
+        if not items:
+            payload["note"] = "未检索到相关内容"
+        return json.dumps(payload, ensure_ascii=False, indent=2)
     
     messages: list[dict[str, str]] = [{"role": "system", "content": dynamic_system_prompt}]
 
@@ -385,22 +422,14 @@ def _build_openai_messages(
 
     context_blocks: List[str] = []
 
-    log_lines = ["## [可用工具 1: 日志数据库 (Log DB)]"]
-    if not log_results:
-        log_lines.append("（未从日志数据库检索到相关内容）")
-    else:
-        for i, item in enumerate(log_results, 1):
-            log_lines.append(_format_log_evidence(item, i))
-    context_blocks.append("\n".join(log_lines))
+    structured_log_results = [_normalize_log_item(item) for item in log_results]
+    structured_web_results = [_normalize_web_item(item) for item in web_results]
 
-    web_lines = ["## [可用工具 2: 联网搜索 (Web Search)]"]
-    if not web_results:
-        web_lines.append("（未启用或未从联网搜索检索到相关内容）")
-    else:
-        for i, item in enumerate(web_results, 1):
-            source = item.get("source", "N/A")
-            web_lines.append(f"网页 {i} (Source: {source}): {item.get('content', '')}")
-    context_blocks.append("\n".join(web_lines))
+    log_context_payload = _format_structured_payload(structured_log_results, "log_evidence_chain")
+    web_context_payload = _format_structured_payload(structured_web_results, "web_context")
+
+    context_blocks.append(log_context_payload)
+    context_blocks.append(web_context_payload)
 
     user_content = "\n\n".join(context_blocks) + f"\n\n当前用户问题:\n{prompt}"
     messages.append({"role": "user", "content": user_content})

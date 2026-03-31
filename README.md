@@ -2,190 +2,205 @@
 
 DeepSOC 是一个面向网络安全日志分析场景的 SOC（Security Operations Center）原型系统，采用前后端分离架构：
 
-- 后端：Django + django-ninja + ChromaDB + Ollama/OpenAI-compatible LLM
+- 后端：Django + django-ninja + ChromaDB + LlamaIndex + Ollama / OpenAI-compatible LLM
 - 前端：Vue 3 + Pinia + Naive UI + ECharts + Three.js
 
-当前版本已经从“演示壳”升级为可运行的最小可用 SOC 工作台，前端围绕登录、仪表盘、分析终端和系统设置四个主场景完成了较完整的交互链路。
+当前版本已具备可演示、可迭代的最小可用能力，可支撑比赛场景下的完整链路展示：登录鉴权、流式分析、会话管理、附件解析、结构化检索、多智能体协同、态势看板与拓扑可视化。
 
 ---
 
-## 项目现状说明
+## 1. 参赛定位
 
-本 README 只描述仓库中已经落地的能力，避免把规划写成事实。
+本项目定位于“软件应用与开发赛道”的安全运营原型系统，核心价值不是单点算法，而是完整的软件工程闭环：
 
-- 已实现：前后端 API 联通、SSE 流式对话、会话持久化、文件附件上传、模型/Provider 切换、仪表盘统计和拓扑可视化、多智能体编排。
-- 待完善：五大安全数据库样本量仍偏小，仪表盘更多是聚合统计而非深度推理，Three.js 和背景动画在低性能设备上仍有性能压力。
+1. 数据层：统一 JSONL 情报数据接入，支持结构化字段沉淀。
+2. 能力层：向量检索 + 规则融合 + 多模型路由 + 多智能体推理。
+3. 交互层：流式终端 + 可解释过程 + 看板下钻 + 配置化运维入口。
 
 ---
 
-## 已实现能力
+## 2. 已实现能力总览
 
-### 1. 后端能力
+### 2.1 后端能力
 
 - API Key 登录认证，默认密码为 `secret`。
-- 基于 SSE 的流式聊天接口 `/api/chat`。
-- 会话上下文持久化、会话历史读取和清空。
-- 支持重新生成和编辑后续回答，基于历史回放重建上下文。
-- 文件上传解析：支持 `.txt`、`.docx`、`.xlsx`。
-- 本地日志检索 + 可选联网检索（DuckDuckGo via `ddgs`）。
+- SSE 流式聊天接口，支持单模型与多智能体两种模式。
+- 会话上下文持久化（SQLite），支持历史读取与清空。
+- 支持“编辑后续回答”和“重新生成最后一轮回复”。
+- 文件附件解析：支持 `.txt`、`.docx`、`.xlsx`。
+- 本地知识库检索（TopKLogSystem）+ 可选联网检索（博查 Web Search API）。
 - 多 provider 模型路由：`ollama`、`openai`、`deepseek`、`minimax`、`siliconflow`。
-- 多智能体编排：`RAG Agent + Web Agent` 并行分析，`Synthesis Agent` 汇总输出。
-- OpenAI-compatible 错误结构化透传：provider 返回 4xx/5xx 时，SSE 会携带 `error_detail`，包含 `provider`、`model`、`status_code`、`error_code`、`message`、`request_id` 等字段。
-- Dashboard 聚合接口 `/api/dashboard/stats`，直接从 `data/log` 下的 CSV 聚合图表与拓扑数据。
+- OpenAI-compatible 异常结构化透传（provider/model/status_code/error_code/message/request_id）。
+- 仪表盘聚合接口直接读取 `django_backend/data/log` 下的 JSONL 数据。
 
-### 2. 检索与模型调用链路
+### 2.2 检索与证据链能力
 
-- `TopKLogSystem` 使用 `OllamaEmbeddings + ChromaDB + LlamaIndex` 构建/加载向量库。
-- 检索策略为“向量检索 + 简单关键词融合”。
-- 默认本地模型是 `deepseek-r1:7b`，默认嵌入模型是 `bge-large:latest`。
-- OpenAI-compatible provider 的 API Key 可以通过前端设置页或环境变量注入。
+- 向量库技术栈：Ollama Embeddings + ChromaDB + LlamaIndex。
+- 支持 JSONL 结构化加载：`search_content` 入向量，关键字段进入 metadata。
+- 检索流程：意图信号提取 -> 召回（向量 + 精确特征）-> 重排 -> 分组聚合 -> 证据链输出。
+- 返回结果已结构化：`group_key`、`group_type`、`member_count`、`entity_summary`、`evidence_chain`。
 
-### 3. 前端能力
+### 2.3 前端能力
 
-- 路由结构为登录页、仪表盘、分析终端、系统设置四个主页面，未登录时会被导航守卫拦截到 `/login`。
-- 全局布局采用左侧导航 + 顶部状态栏 + 主内容区的 SOC 控制台结构。
-- 仪表盘支持全局拓扑图、威胁雷达图、日志流入图、类别分布图和汇总计数，并提供拓扑折叠与全屏查看。
-- 分析终端支持会话列表、会话搜索、创建会话、删除会话、清空历史和当前会话切换。
-- 聊天输入支持数据库检索、联网检索、多智能体模式切换、附件上传（`.txt`、`.docx`、`.xlsx`）和模型矩阵配置。
-- 消息气泡支持流式输出、Markdown 渲染、代码高亮、思考过程折叠、多智能体过程展开、复制、编辑和重新生成。
-- 系统设置支持 provider/model 切换、provider API Key、联网搜索 API Key、本地导出会话 HTML 和退出登录。
-- 前端状态通过 Pinia 持久化到 localStorage，包含会话、草稿、模型参数和登录态。
-- `src/api.js` 统一封装登录、流式聊天、历史记录、清空历史、统计看板和文件上传接口。
+- 路由与权限：`/login`、`/dashboard`、`/chat`、`/settings`，未登录自动跳转登录页。
+- 全局布局：侧边导航 + 顶部态势栏 + 主内容区。
+- 分析终端：会话创建/切换/搜索/删除/清空、流式消息、附件输入、多智能体过程展示。
+- 消息操作：复制、编辑、重新生成，Markdown + 代码高亮渲染。
+- 仪表盘：拓扑图、威胁雷达、日志流入、分类分布、指标动画与全屏下钻。
+- 设置页：Provider/模型/API Key 配置、会话 HTML 导出、退出登录。
+- 状态持久化：Pinia + localStorage（登录态、会话草稿、模型配置等）。
 
 ---
 
-## 前端页面结构
-
-### 路由与布局
-
-- `/login`：登录页。
-- `/dashboard`：安全态势大屏。
-- `/chat`：分析终端。
-- `/settings`：系统设置。
-- `GlobalLayout`：承载全局导航、会话状态和主内容区域。
-
-### 仪表盘
-
-- `Dashboard.vue` 组合 `TopologyScene`、`ThreatRadarChart`、`LogInflowChart` 和 `CategoryDonutChart`。
-- 支持拓扑卡片折叠、全屏切换和备用弹窗展示。
-- 汇总指标采用数值过渡动画，标题使用文字扰动动效。
-
-### 分析终端
-
-- `ChatPage.vue` 将左侧会话栏和中间聊天终端组合成主工作区。
-- `Chat.vue` 负责终端壳层、消息流、错误提示和输入区组织。
-- `ChatInput.vue` 负责检索开关、附件上传、多智能体配置和发送载荷构建。
-- `ChatMessage.vue` 负责用户消息、模型回复、思考过程、多智能体过程和操作按钮展示。
-
-### 系统设置
-
-- `Settings.vue` 负责 provider/model/API Key 配置。
-- 支持按当前会话导出 HTML 格式聊天记录。
-- 支持一键退出登录并清理认证状态。
-
----
-
-## 五大核心安全数据库（MVP）
-
-你新加入的五大核心数据库已经在仓库中落位，并用于当前最小可用场景。
-
-| 数据库 | 当前状态 | 目录 |
-|---|---|---|
-| 安全案例库 | 已接入，当前为最小样本 | `django_backend/data/log/安全案例库/` |
-| 安全处置策略模板库 | 已接入，当前为最小样本 | `django_backend/data/log/安全处置策略模板库/` |
-| 常见 Web 攻击模式库 | 已接入，当前为最小样本 | `django_backend/data/log/常见 Web 攻击模式库/` |
-| CVE&漏洞情报库 | 已接入标准化样本 | `django_backend/data/log/CVE&漏洞情报库/` |
-| IOC 规则样本库 | 已接入基础样本 | `django_backend/data/log/IOC 规则样本库/` |
-
-### 当前边界
-
-- 目前是经典场景的最小覆盖，样本规模还不大。
-- 多数目录仅有少量 CSV，主要用于跑通链路与演示。
-- 后续需要继续扩充样本量、字段质量和标签体系，提升检索命中与分析可信度。
-
----
-
-## 多智能体实现说明
-
-### 1. 后端编排架构
-
-- 入口：`/api/chat` 在 `mode=multi_agent` 时进入编排流程。
-- 编排器：`Orchestrator` 并发执行 `rag` 和 `web`，并在二者完成后执行 `synthesis`。
-- 模型配置：前端可按 agent 传递 `provider`、`model`、`provider_api_key`，后端会逐 agent 合并默认配置。
-- 错误透传：OpenAI-compatible provider 失败时，后端会提取结构化错误并透传到 SSE 的 `agent_status(error)` 事件里。
-
-### 2. 前端消费与状态管理
-
-- `src/api.js` 统一解析 SSE，支持 `agent_chunk`、`agent_status`、`content`、`think`、`metadata`、`error`、`done`。
-- `chatStore` 为每个 agent 维护 `status`、`content`、`error`、`errorDetail`。
-- `ChatMessage` 在多智能体折叠面板中展示 RAG / WEB 输出与错误详情。
-- 后端显式发送 `done` 事件，前端在 `done` 或 `synthesis done/error` 时结束 loading。
-
-### 3. SSE 事件约定（多智能体）
-
-- `agent_chunk`: `{"type":"agent_chunk","agent_id":"rag|web|synthesis","content":"..."}`
-- `agent_status`: `{"type":"agent_status","agent_id":"...","status":"started|done|error","error":"...","error_detail":{...}}`
-- `done`: `{"type":"done"}`
-
-### 4. P0 重构：从“文本流水线”升级为“可解释分工推理”
-
-为响应答辩评委对“系统架构实际意义”的要求，`agents/` 已完成一轮 P0 级重构：
-
-1. 职责物理隔离（Prompt 级硬约束）
-
-- `RAG Agent`：只允许读取内部数据库证据，不允许下最终结论。
-- `Web Agent`：只允许提取外部威胁情报，不允许下最终结论。
-- `Synthesis Agent`：只消费前置 JSON 报文，负责冲突解决与最终定性。
-
-2. 前置 Agent 强制 JSON 输出
-
-- RAG/Web Prompt 统一要求“仅输出一个 JSON 对象”。
-- JSON 中包含 `agent`、`found`、`confidence` 等字段，便于前端按字段渲染与审计。
-
-3. 无异常分支的稳健 JSON 净化
-
-- 编排层不依赖异常分支做解析回退，而是通过正则优先提取 JSON 代码块或 `{...}` 对象块。
-- 若模型输出被污染（夹杂解释文本），会降级为可追踪的 fallback JSON，确保传给 Synthesis 的输入仍是结构化数据。
-
-4. 对外陈述（可直接用于答辩）
-
-> 我们重构了多智能体协同机制，摒弃了简单的文本拼接流水线。现在系统是一套可解释的分工推理架构：底层 RAG Agent 和 Web Agent 被严格约束为“只读不判”的结构化数据探针，输出包含置信度的 JSON 报文；顶层 Synthesis Agent 作为中枢，消费这些 JSON 执行冲突解决和最终定性。整个决策过程可在前端透明展示并可追溯审计。
-
----
-
-## 核心接口
-
-| 接口 | 方法 | 说明 |
-|---|---|---|
-| `/api/login` | POST | 登录并获取 API Key |
-| `/api/chat` | POST | 流式问答接口（SSE） |
-| `/api/history` | GET | 获取当前会话历史 |
-| `/api/history` | DELETE | 清空当前会话历史 |
-| `/api/upload_file` | POST | 上传并解析 `.txt/.docx/.xlsx` |
-| `/api/dashboard/stats` | GET | 统计图表与拓扑聚合数据 |
-
----
-
-## 系统架构（当前实现）
+## 3. 系统架构（当前实现）
 
 ```text
 Browser (Vue 3 SOC Console)
-  -> Django Ninja API
-    -> Session/Auth (SQLite)
+  -> Django Ninja API (/api/*)
+    -> APIKey/Auth + Session (SQLite)
     -> TopKLogSystem
-      -> Local Vector Store (ChromaDB)
-      -> data/log CSV knowledge base
-    -> Optional Web Search (ddgs)
+      -> ChromaDB Vector Store (./data/vector_stores)
+      -> data/log JSONL Knowledge Base
+    -> Optional Web Search (Bocha API)
     -> LLM Provider Router
-      -> Ollama(local)
-      -> OpenAI-compatible APIs
+      -> Ollama (local)
+      -> OpenAI-compatible Providers
+    -> Multi-Agent Orchestrator (RAG + WEB -> Synthesis)
 ```
 
 ---
 
-## 技术栈
+## 4. 后端实现说明
 
-### 后端
+### 4.1 核心接口
+
+| 接口 | 方法 | 说明 |
+|---|---|---|
+| `/api/login` | POST | 登录并签发 API Key |
+| `/api/chat` | POST | 流式问答（SSE），支持单模型/多智能体 |
+| `/api/history` | GET | 获取指定会话历史（`session_id`） |
+| `/api/history` | DELETE | 清空指定会话历史（`session_id`） |
+| `/api/upload_file` | POST | 上传并解析 `.txt/.docx/.xlsx` |
+| `/api/dashboard/stats` | GET | 仪表盘聚合数据 |
+
+### 4.2 认证与会话
+
+- 认证方式：`Authorization: Bearer <api_key>`。
+- API Key 与会话均落库在 SQLite。
+- 会话上下文采用文本化存储（`用户：...` / `回复：...`），并支持解析为历史消息列表。
+
+### 4.3 检索系统 TopKLogSystem
+
+- 向量库默认路径：`django_backend/data/vector_stores`。
+- 数据加载支持：`.txt`、`.md`、`.json`、`.jsonl`、`.csv`、`.log`、`.xml`、`.yaml`、`.yml`、`.docx`、`.pdf`。
+- JSON/JSONL 结构化处理：
+  - `search_content` 作为向量文本。
+  - `_id`、`db_type`、`risk_level`、`cve_id`、`ioc_value`、`source`、`confidence`、`raw_content_hash`、`mitre_attack_id`、`tags` 等进入 metadata。
+  - 自动写入 `record_file`、`record_line` 便于追溯。
+- 检索结果经过重排和分组后返回，优先按 `cve_id` / `ioc_value` / `raw_content_hash` / `tags` 聚合为证据簇。
+
+### 4.4 多智能体编排
+
+- 编排器并发运行：
+  - `VectorAgent`（RAG，内部证据提取）
+  - `SearchAgent`（WEB，外部情报提取）
+- 汇总阶段：`SynthesisAgent` 消费前置 JSON 报文并输出最终结论。
+- 事件流：RAG/WEB 完成后再启动 Synthesis，前端可按 agent 状态可视化展示全过程。
+
+### 4.5 模型与联网检索
+
+- Provider 路由：`ollama`、`openai`、`deepseek`、`minimax`、`siliconflow`。
+- OpenAI-compatible 调用失败时返回结构化错误详情。
+- 联网检索当前实现使用博查接口（`BOCHA_API_KEY`），不再以 DuckDuckGo 作为主路径。
+
+---
+
+## 5. 前端实现说明
+
+### 5.1 路由与布局
+
+- 路由：`/login`、`/dashboard`、`/chat`、`/settings`。
+- 布局：`GlobalLayout` 负责侧栏导航、顶部状态栏和页面容器。
+
+### 5.2 分析终端（Chat）
+
+- 会话操作：新建、切换、删除、搜索、清空。
+- 输入能力：DB 检索开关、联网检索开关、多智能体开关、附件上传。
+- 消息能力：流式更新、Markdown 渲染、代码高亮、复制/编辑/重新生成。
+- 多智能体展示：可展开查看 RAG 与 WEB 的实时输出、状态与错误详情。
+
+### 5.3 安全态势看板（Dashboard）
+
+- 图表组件：
+  - 威胁雷达图（Threat Radar）
+  - 日志流入图（Log Ingest Stream）
+  - 分类分布图（Category Distribution）
+  - 三维拓扑图（Global Attack Topology）
+- 支持卡片折叠、全屏查看、Esc 退出、引导提示。
+- 支持看板下钻：点击图例/数据点可跳转聊天终端并预填分析问题。
+
+### 5.4 系统设置（Settings）
+
+- 配置 Provider、模型、Provider API Key、Web Search API Key。
+- 支持按会话导出 HTML 记录。
+- 支持一键退出登录。
+
+---
+
+## 6. 多智能体 SSE 事件约定
+
+### 6.1 多智能体模式
+
+- `agent_chunk`
+
+```json
+{"type":"agent_chunk","agent_id":"rag|web|synthesis","content":"..."}
+```
+
+- `agent_status`
+
+```json
+{"type":"agent_status","agent_id":"...","status":"started|done|error","error":"...","error_detail":{}}
+```
+
+- 结束事件
+
+```json
+{"type":"done"}
+```
+
+### 6.2 单模型模式
+
+- 主要返回 `content` 分片事件。
+- 异常时返回 `error` 事件（可能携带结构化 `error_detail`）。
+
+---
+
+## 7. 数据资产与目录
+
+当前仓库中，知识数据已统一为 JSONL 文件（非 CSV），核心目录如下：
+
+| 目录 | 说明 |
+|---|---|
+| `django_backend/data/log/CVE&漏洞情报库/` | CVE 漏洞情报 |
+| `django_backend/data/log/IOC 规则样本库/` | IOC 指标样本 |
+| `django_backend/data/log/常见Web攻击模式库/` | 常见 Web 攻击模式 |
+| `django_backend/data/log/安全处置策略与案例库/` | 处置策略 + 案例（物理目录合并） |
+
+说明：项目逻辑上覆盖“案例库 + 策略库”两类知识，但在当前仓库中合并存放在同一物理目录。
+
+### 7.1 JSONL 统一字段（当前实现）
+
+- 主键与追溯：`_id`、`raw_content_hash`、`source`、`fetched_at`
+- 检索语义：`search_content`
+- 结构化标签：`db_type`、`risk_level`、`cve_id`、`ioc_value`、`mitre_attack_id`、`tags`
+- 质量与可信度：`confidence`、`verified`
+
+---
+
+## 8. 技术栈
+
+### 8.1 后端
 
 - Django 5.2.7
 - django-ninja 1.4.4
@@ -194,9 +209,9 @@ Browser (Vue 3 SOC Console)
 - llama-index 0.14.5
 - langchain-ollama 0.3.8
 - openai 1.109.1
-- ddgs 9.7.0
+- requests 2.32.5
 
-### 前端
+### 8.2 前端
 
 - Vue 3.5.18
 - Pinia 3.0.3
@@ -212,9 +227,9 @@ Browser (Vue 3 SOC Console)
 
 ---
 
-## 快速开始
+## 9. 快速开始
 
-### 1. 后端
+### 9.1 后端
 
 ```bash
 cd django_backend
@@ -223,9 +238,9 @@ python manage.py migrate
 python manage.py runserver
 ```
 
-说明：`manage.py` 已将默认端口设为 `8081`，可通过 `DJANGO_PORT` 覆盖。
+说明：默认端口为 `8081`，可通过环境变量 `DJANGO_PORT` 覆盖。
 
-### 2. 前端
+### 9.2 前端
 
 ```bash
 cd vue_frontend
@@ -233,7 +248,9 @@ npm install
 npm run dev
 ```
 
-默认前端地址：`http://localhost:8082`。Vite 会把 `/api` 代理到 `http://localhost:8081`。
+默认前端地址：`http://localhost:8082`。
+
+前端已配置 Vite 代理：`/api -> http://localhost:8081`。
 
 构建与预览：
 
@@ -242,59 +259,58 @@ npm run build
 npm run preview
 ```
 
-### 3. 本地模型准备
+### 9.3 本地模型准备（Ollama）
 
 ```bash
 ollama pull deepseek-r1:7b
 ollama pull bge-large:latest
 ```
 
-### 4. 登录
+### 9.4 登录
 
 - 用户名：自定义
 - 密码：`secret`
 
 ---
 
-## 环境变量
+## 10. 环境变量
 
-如需使用云端 provider，可配置：
+可选配置如下（也可在前端设置页填写）：
 
 - `OPENAI_API_KEY`
 - `DEEPSEEK_API_KEY`
 - `MINIMAX_API_KEY`
 - `SILICONFLOW_API_KEY`
-
-也可以在前端设置页中临时填写 provider API Key 和 Web Search API Key。
+- `BOCHA_API_KEY`
+- `DJANGO_PORT`
 
 ---
 
-## 当前目录结构
+## 11. 当前目录结构
 
 ```text
 .
 ├── django_backend
 │   ├── deepseek_api
 │   │   ├── api.py
+│   │   ├── services.py
 │   │   ├── dashboard_stats.py
 │   │   ├── models.py
 │   │   ├── schemas.py
-│   │   ├── services.py
-│   │   └── urls.py
+│   │   └── agents/
 │   ├── deepseek_project
 │   ├── data/log
-│   │   ├── 安全案例库
-│   │   ├── 安全处置策略模板库
-│   │   ├── 常见 Web 攻击模式库
 │   │   ├── CVE&漏洞情报库
-│   │   └── IOC 规则样本库
+│   │   ├── IOC 规则样本库
+│   │   ├── 常见Web攻击模式库
+│   │   └── 安全处置策略与案例库
 │   ├── topklogsystem.py
 │   └── manage.py
 └── vue_frontend
     ├── src
-    │   ├── layouts/
     │   ├── components/
     │   ├── composables/
+    │   ├── layouts/
     │   ├── stores/
     │   └── views/
     └── vite.config.js
@@ -302,89 +318,29 @@ ollama pull bge-large:latest
 
 ---
 
-## 已知问题
+## 12. 已知问题与边界
 
-- CORS 默认配置仍可能保留旧端口（`8090`），如果跨域失败，需要在 Django 配置里补充当前前端端口。
-- 背景粒子连线和 Three.js 拓扑长期动画会占用较高 GPU / CPU。
-- 图表语义目前主要基于 CSV 聚合与关键词风险分级（high / medium / low），分析深度有限。
-- 多智能体编排已在当前版本落地，下一阶段可以继续引入更复杂的图工作流和可观测链路追踪。
-
----
-
-## 下一步迭代建议
-
-1. 扩充五大核心数据库样本规模与标注质量。
-2. 定义统一安全事件 Schema（IOC / CVE / 节点 / 边 / 证据来源 / 处置优先级）。
-3. 将图表和拓扑从聚合统计升级到真实攻击链语义渲染。
-4. 在现有多智能体编排基础上引入图式工作流和可视化追踪。
-5. 做前端性能治理，例如粒子降采样、动画节流和按需渲染。
+1. Django CORS 默认配置仍含旧端口（`8090`），若出现跨域需在 `settings.py` 补充当前前端端口（`8082`）。
+2. Three.js 拓扑与背景粒子动画在低性能设备上可能存在 GPU/CPU 压力。
+3. 会话列表当前由前端本地维护，后端未提供“会话列表查询”接口。
+4. 看板属于结构化聚合呈现，深度研判能力仍依赖检索质量和模型能力。
 
 ---
 
-## 参赛定位总结
+## 13. 下一步迭代建议
 
-当前版本已经具备“可演示、可迭代”的 SOC 原型基础：
-
-- 数据层：五大核心安全数据库已开库，但仍是 MVP 样本。
-- 能力层：问答、检索、流式交互、统计可视化已贯通。
-- 展示层：SOC 控制台骨架完整，但真实性和流畅度仍需要继续打磨。
-
-这与当前阶段目标一致：先跑通经典场景，再逐步扩充数据与分析深度。
+1. 扩充情报数据规模，完善标签与置信度治理。
+2. 增加统一事件 Schema（IOC/CVE/节点/边/处置优先级）。
+3. 将拓扑从聚合关系升级为攻击链语义图。
+4. 增加编排观测能力（trace、耗时、失败率、重试路径）。
+5. 持续推进前端性能治理（降采样、节流、按需渲染）。
 
 ---
 
-## 新版 JSONL 数据集接入与检索质量升级（2026-03）
+## 14. 答辩可陈述亮点（建议）
 
-后端已完成对统一 JSONL Schema 的结构化接入，不再把整条 JSON 原文粗暴拼接入向量。
+可重点强调以下三点工程价值：
 
-### 0. 数据集字段规则（统一 JSON Schema）
-
-当前数据集统一采用 JSON Lines（`.jsonl`）格式，核心要求是“顶层字段稳定、检索字段上浮、长尾字段下沉”。
-
-- 必填字段：`_id`、`db_type`、`search_content`、`source`、`fetched_at`、`raw_content_hash`。
-- 顶层稳定字段：`risk_level`、`mitre_attack_id`、`tags`、`cve_id`、`ioc_value`、`payload`、`affected_product`、`confidence`、`verified`、`source_dataset`、`source_url`、`original_id`、`label_source`。
-- `details` 只用于存放低频长尾信息，禁止把 `cve_id`、`ioc_value`、`payload`、`affected_product` 这类高频关键信息塞回 `details`。
-- `search_content` 是 RAG 向量检索的唯一自然语言输入，必须采用四段式模板：对象、发生、风险、建议，长度控制在 80-200 字。
-- `risk_level` 统一映射为 `Critical`、`High`、`Medium`、`Low`、`Info`，不保留中英文混写状态。
-- `mitre_attack_id` 使用正则 `T\d{4}(?:\.\d{3})?` 统一提取；`tags` 只允许短标签，不允许长句。
-- `Document.metadata` 只能写入标量值，因此列表字段需要先序列化；检索时再按逗号或分号拆回去。
-- 去重键优先使用 `raw_content_hash`，冲突合并时保留来源优先级和置信度信息，便于后续审计和答辩溯源。
-
-### 1. 文档加载器（Document Loader）升级
-
-- `TopKLogSystem._process_json` 在读取 `.jsonl` 时，仅使用 `search_content` 作为 `Document.text`。
-- 以下字段已写入 `Document.metadata`：`_id`、`db_type`、`risk_level`、`cve_id`、`ioc_value`、`source`、`confidence`、`raw_content_hash`、`mitre_attack_id`、`tags` 等。
-- 增加记录位置信息：`record_file`、`record_line`，便于检索证据回溯。
-
-收益：向量空间只承载语义文本，不再被键名、URL、时间戳等噪声污染，召回质量更稳定。
-
-### 2. 检索链路升级（召回 -> 重排 -> 去重 -> 证据返回）
-
-`TopKLogSystem` 新增统一接口：
-
-- `retrieve(query, top_k=..., use_keyword=..., filters=...)`
-
-完整链路：
-
-1. 召回：向量召回 + 关键词召回（支持 CVE 编号、ATT&CK 编号和通用 token）。
-2. 重排：综合向量分、关键词命中、`confidence`、`source_priority`、`risk_level` 进行加权排序。
-3. 去重：优先使用 `raw_content_hash` 去重，其次 `_id`，最后 `content` 兜底。
-4. 返回证据：每条结果均返回 `content + score + metadata + evidence`，便于解释与审计。
-
-同时保留 `retrieve_logs(...)` 作为兼容包装，现已委托到 `retrieve(...)`，不影响现有调用方。
-
-### 3. 后端两个文件的改进
-
-- `[django_backend/topklogsystem.py](django_backend/topklogsystem.py)`：检索链路从单纯 Top-K 列表升级为“候选召回 -> 精细重排 -> 证据链聚合 -> 弱命中回退”。现在会按 `cve_id`、`ioc_value`、`raw_content_hash`、`tags` 等维度自动分组，输出 `group_key`、`group_type`、`member_count`、`entity_summary` 和 `evidence_chain`，让 LLM 看到的不是扁平证据，而是可推理的攻击链。
-- `[django_backend/deepseek_api/services.py](django_backend/deepseek_api/services.py)`：OpenAI-compatible 路径与本地 Ollama 路径统一改成 JSON 证据注入，不再只拼接 `content` 文本。现在会把 `db_type`、`risk_level`、`confidence`、`source`、`raw_content_hash`、`record_file`、`record_line`、`mitre_attack_id`、`tags` 等字段一起送入 prompt，确保模型消费的是结构化证据链。
-
-### 4. Dashboard 结构化聚合升级
-
-`deepseek_api/dashboard_stats.py` 已从 CSV 关键词猜测切换为 JSONL 字段聚合：
-
-- Threat Radar：直接聚合 `risk_level`（Critical/High/Medium/Low/Info）。
-- Category 分布：直接聚合 `db_type`。
-- Topology：以 `db_type` 作为核心节点，以 `tags` 作为次级节点连线。
-- 时间线：按 JSONL 文件记录数与 `fetched_at`/文件更新时间汇总。
-
-收益：态势大屏统计结果由结构化情报直接驱动，语义更准确、可解释性更强。
+1. 不是“单轮问答演示”，而是具备完整状态管理与证据可追溯的软件系统。
+2. 不是“文本拼接多模型”，而是具备角色约束与可解释过程的多智能体编排。
+3. 不是“静态看板”，而是具备从态势可视化到分析终端的下钻闭环。

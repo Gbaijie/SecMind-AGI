@@ -9,6 +9,8 @@ import logging
 import threading
 import pandas as pd
 from typing import Any, Dict, List, Optional
+from tqdm.auto import tqdm
+from llama_index.core.node_parser import SentenceSplitter
 
 # langchain
 from langchain.prompts import (
@@ -33,6 +35,7 @@ from llama_index.vector_stores.chroma import ChromaVectorStore
 # 日志
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 import re
 from docx import Document as DocxDocument
@@ -64,6 +67,7 @@ class TopKLogSystem:
 
     def _build_vectorstore(self):
         vector_store_path = "./data/vector_stores"
+        batch_size = 16
 
         if os.path.exists(vector_store_path):
             logger.info(f"加载现有向量数据库索引: {vector_store_path}")
@@ -92,18 +96,50 @@ class TopKLogSystem:
         
         log_documents = self._load_documents(self.log_path)
         if log_documents:
-            self.log_index = VectorStoreIndex.from_documents(
-                log_documents,
-                storage_context=log_storage_context,
-                show_progress=True,
+            # 显式将 Document 解析为符合长度限制的 Node 集合，防止单条过长导致 embedding 接口报错
+            text_splitter = SentenceSplitter(
+                chunk_size=Settings.chunk_size,
+                chunk_overlap=Settings.chunk_overlap
             )
-            logger.info(f"日志库索引构建完成，共 {len(log_documents)} 条数据")
+            log_nodes = text_splitter.get_nodes_from_documents(log_documents)
+
+            total_batches = (len(log_nodes) + batch_size - 1) // batch_size
+            logger.info(
+                f"开始构建日志库索引，共 {len(log_nodes)} 个切分节点 (来源: {len(log_documents)} 条文档)，批次大小 {batch_size}，总批次 {total_batches}"
+            )
+            self.log_index = VectorStoreIndex(
+                nodes=[],
+                storage_context=log_storage_context,
+                insert_batch_size=batch_size,
+                show_progress=False,
+            )
+
+            with tqdm(
+                total=len(log_nodes),
+                desc="构建向量库：嵌入入库",
+                unit="node",
+                dynamic_ncols=True,
+                mininterval=0.1,
+                miniters=1,
+                smoothing=0,
+            ) as progress:
+                for batch_index, start in enumerate(range(0, len(log_nodes), batch_size), start=1):
+                    batch_nodes = log_nodes[start : start + batch_size]
+                    progress.set_description(
+                        f"构建向量库：嵌入入库[{batch_index}/{total_batches}]"
+                    )
+                    self.log_index.insert_nodes(batch_nodes)
+                    completed = min(start + len(batch_nodes), len(log_nodes))
+                    progress.update(len(batch_nodes))
+                    progress.set_postfix_str(f"已入库={completed}/{len(log_nodes)}")
+
+            logger.info(f"日志库索引构建完成，共入库 {len(log_nodes)} 个节点")
 
     @staticmethod
     def _load_documents(data_path: str) -> List[Document]:
         if not os.path.exists(data_path):
             return []
-        documents = []
+        loadable_files: List[str] = []
         for root, _, files in os.walk(data_path):
             for file in files:
                 ext = os.path.splitext(file)[1]
@@ -112,9 +148,21 @@ class TopKLogSystem:
                     ".log", ".xml", ".yaml", ".yml", ".docx", ".pdf",
                 ]:
                     continue
-                
-                file_path = os.path.join(root, file)
-                
+                loadable_files.append(os.path.join(root, file))
+
+        documents = []
+        if not loadable_files:
+            return documents
+
+        with tqdm(
+            total=len(loadable_files),
+            desc="构建向量库：解析文件",
+            unit="file",
+            dynamic_ncols=True,
+        ) as progress:
+            for file_path in loadable_files:
+                ext = os.path.splitext(file_path)[1]
+
                 if ext == ".csv":
                     documents.extend(TopKLogSystem._process_csv(file_path))
                 elif ext in [".json", ".jsonl"]:
@@ -131,7 +179,9 @@ class TopKLogSystem:
                     documents.extend(TopKLogSystem._process_pdf(file_path))
                 else:
                     documents.extend(TopKLogSystem._process_text(file_path))
-                    
+                progress.set_postfix_str(f"文档数={len(documents)}")
+                progress.update(1)
+
         return documents
 
     @staticmethod

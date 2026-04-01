@@ -450,14 +450,55 @@ const handleFullscreenModalChange = (show) => {
 .dashboard-page {
   min-height: 0;
   height: 100%;
-  overflow: auto;
+  overflow: hidden;
   padding-right: 0.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.dashboard-page > .n-grid {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  display: grid;
+  grid-template-rows: minmax(0, 1.65fr) minmax(0, 1fr);
+  align-content: stretch;
+}
+
+.dashboard-page > .n-grid > .n-gi {
+  min-height: 0;
+}
+
+.dashboard-page > .n-grid > .n-gi:first-child {
+  display: flex;
+}
+
+.dashboard-page > .n-grid > .n-gi:last-child {
+  display: flex;
+}
+
+.dashboard-page > .n-grid > .n-gi:last-child > .n-grid {
+  min-height: 0;
+  height: 100%;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: stretch;
+  align-content: stretch;
+}
+
+.dashboard-page > .n-grid > .n-gi:last-child > .n-grid > .n-gi {
+  min-height: 0;
+  display: flex;
+  height: 100%;
 }
 
 .topology-panel-host {
-  min-height: 220px;
+  min-height: 0;
   display: flex;
   flex-direction: column;
+  flex: 1;
+  height: 100%;
 }
 
 .topology-panel-host:fullscreen,
@@ -481,8 +522,9 @@ const handleFullscreenModalChange = (show) => {
 }
 
 .center-topology-card {
-  min-height: 220px;
-  height: clamp(260px, 46vh, 520px);
+  min-height: 0;
+  height: 100%;
+  flex: 1;
 }
 
 .center-topology-card :deep(.fui-card-body) {
@@ -492,10 +534,12 @@ const handleFullscreenModalChange = (show) => {
 }
 
 .chart-panel-host {
-  min-height: 220px;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   position: relative;
+  flex: 1;
+  height: 100%;
 }
 
 .chart-panel-host:fullscreen,
@@ -597,7 +641,9 @@ const handleFullscreenModalChange = (show) => {
 }
 
 .chart-card {
-  min-height: 240px;
+  min-height: 0;
+  height: 100%;
+  flex: 1;
 }
 
 .chart-card :deep(.fui-card-body) {
@@ -756,6 +802,10 @@ const handleFullscreenModalChange = (show) => {
 }
 
 @media (max-width: 1024px) {
+  .dashboard-page > .n-grid {
+    grid-template-rows: minmax(0, 1.5fr) minmax(0, 1fr);
+  }
+
   .topology-modal-wrap {
     width: min(980px, 96vw);
   }
@@ -767,6 +817,10 @@ const handleFullscreenModalChange = (show) => {
 }
 
 @media (max-width: 640px) {
+  .dashboard-page {
+    gap: 10px;
+  }
+
   .topology-restore-btn {
     font-size: 0.55rem;
   }

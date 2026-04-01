@@ -62,10 +62,12 @@ const createCanvasTextSprite = (text, colorHex, options = {}) => {
     const fontSize = options.fontSize || 28
     const padX = options.paddingX || 22
     const padY = options.paddingY || 13
+    const renderScale = options.renderScale || 2
     ctx.font = `700 ${fontSize}px "Roboto Mono", monospace`
     const w = Math.max(120, Math.ceil(ctx.measureText(value).width) + padX * 2)
     const h = fontSize + padY * 2
-    canvas.width = w; canvas.height = h
+    canvas.width = Math.ceil(w * renderScale); canvas.height = Math.ceil(h * renderScale)
+    ctx.scale(renderScale, renderScale)
     ctx.font = `700 ${fontSize}px "Roboto Mono", monospace`
     ctx.textBaseline = 'middle'
     ctx.fillStyle = 'rgba(5,8,20,0.72)'; ctx.fillRect(0, 0, w, h)
@@ -80,6 +82,7 @@ const createCanvasTextSprite = (text, colorHex, options = {}) => {
     const hs = (options.scale || 1) * 1.5
     sp.scale.set((w / h) * hs, hs, 1)
     sp.renderOrder = 3
+    sp.userData = { pixelWidth: w, pixelHeight: h, aspect: w / h, baseScale: hs }
     return sp
 }
 
@@ -87,6 +90,43 @@ const createCanvasTextSprite = (text, colorHex, options = {}) => {
 const FLOW_PARTICLE_COUNT = 8
 const FLOW_PARTICLE_RADIUS = 0.17
 const LINK_PULSE_TAIL_OFFSET = 0.08
+const LABEL_LAYER_ORDER = {
+    core: 3,
+    db_type: 2,
+    tag: 1,
+}
+const LABEL_BASE_GAP = 10
+const LABEL_COLLISION_PADDING = 8
+const createRadialDiskTexture = () => {
+    const canvas = document.createElement('canvas')
+    canvas.width = 256
+    canvas.height = 256
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return null
+
+    const gradient = ctx.createRadialGradient(128, 128, 10, 128, 128, 128)
+    gradient.addColorStop(0, 'rgba(110, 235, 255, 0.34)')
+    gradient.addColorStop(0.42, 'rgba(34, 170, 255, 0.18)')
+    gradient.addColorStop(0.72, 'rgba(10, 58, 96, 0.10)')
+    gradient.addColorStop(1, 'rgba(5, 8, 20, 0)')
+
+    ctx.fillStyle = gradient
+    ctx.fillRect(0, 0, 256, 256)
+
+    ctx.strokeStyle = 'rgba(137, 214, 255, 0.16)'
+    ctx.lineWidth = 2
+    for (let i = 1; i <= 4; i++) {
+        ctx.beginPath()
+        ctx.arc(128, 128, i * 22, 0, Math.PI * 2)
+        ctx.stroke()
+    }
+
+    const texture = new THREE.CanvasTexture(canvas)
+    texture.minFilter = THREE.LinearFilter
+    texture.magFilter = THREE.LinearFilter
+    texture.generateMipmaps = false
+    return texture
+}
 // 扫描光环配置
 const SCAN_RING_MAX_RADIUS = 52
 const SCAN_RING_INTERVAL = 4200  // ms 完成一圈
@@ -118,6 +158,9 @@ export class TopologyRenderer {
         this.deepStarField = null
         this._starPhases = null
         this.nebulaLayers = []
+        this.focusHaloMesh = null
+        this.focusHaloPulse = 0
+        this.depthFocus = 0
 
         // 扫描光环
         this.scanRingMesh = null
@@ -128,7 +171,11 @@ export class TopologyRenderer {
         this.linkPulses = []
 
         this.autoRotate = true
+        // 用于记录因为用户交互临时暂停 autoRotate 的先前状态
+        this._autoRotatePaused = false
         this.isUserInteracting = false
+        this.pointerParallax = new THREE.Vector2(0, 0)
+        this.pointerParallaxTarget = new THREE.Vector2(0, 0)
         this.model = null
         this.nodeRecords = []
         this.nodeRecordMap = new Map()
@@ -136,6 +183,8 @@ export class TopologyRenderer {
         this.adjacencyMap = new Map()
         this.activeNodeState = { hoveredNodeId: '', focusedNodeId: '', pinnedNodeId: '' }
         this.resourceCache = { geometries: new Map(), materials: new Map() }
+        this.labelLayoutDirty = true
+        this.labelLayoutLastRun = 0
 
         // 节点过滤函数（null = 显示全部）
         this.nodeFilter = null
@@ -217,56 +266,37 @@ export class TopologyRenderer {
         }))
         this.scene.add(this.deepStarField)
 
-        const nebulaGeo = new THREE.PlaneGeometry(130, 130)
-        const nebulaDefs = [
-            { color: 0x00d8ff, y: -10.5, opacity: 0.08, scale: 1.1 },
-            { color: 0x5ea9ff, y: -9.8, opacity: 0.06, scale: 0.88 },
-        ]
-        this.nebulaLayers = nebulaDefs.map((d, idx) => {
-            const mat = new THREE.MeshBasicMaterial({
-                color: d.color,
-                transparent: true,
-                opacity: d.opacity,
-                depthWrite: false,
-                side: THREE.DoubleSide,
-                blending: THREE.AdditiveBlending,
-            })
-            const mesh = new THREE.Mesh(nebulaGeo, mat)
-            mesh.rotation.x = -Math.PI / 2
-            mesh.rotation.z = idx * 0.82
-            mesh.position.y = d.y
-            mesh.scale.setScalar(d.scale)
-            this.scene.add(mesh)
-            return mesh
-        })
-
         // ── 极坐标网格地面 ─────────────────────────
-        const grid = new THREE.PolarGridHelper(40, 8, 4, 64, 0x003a55, 0x001828)
-        grid.position.y = -13
-        if (Array.isArray(grid.material)) {
-            grid.material.forEach(m => { m.transparent = true; m.opacity = 0.25 })
-        } else {
-            grid.material.transparent = true; grid.material.opacity = 0.25
-        }
-        this.scene.add(grid)
-
-        // ── 扫描光环（雷达圈）─────────────────────
-        // 用 RingGeometry 在 XZ 平面上扫描（y = -12.5，和地面齐）
-        const ringGeo = new THREE.RingGeometry(0.01, 0.7, 72)
-        // RingGeometry 默认在 XY 平面，需旋转到 XZ
-        ringGeo.rotateX(-Math.PI / 2)
+        const diskGeo = new THREE.CircleGeometry(SCAN_RING_MAX_RADIUS, 96)
+        diskGeo.rotateX(-Math.PI / 2)
         const ringMat = new THREE.MeshBasicMaterial({
             color: 0x00e5ff,
+            map: createRadialDiskTexture(),
             transparent: true,
             opacity: 0,
             side: THREE.DoubleSide,
             blending: THREE.AdditiveBlending,
             depthWrite: false,
         })
-        this.scanRingMesh = new THREE.Mesh(ringGeo, ringMat)
+        this.scanRingMesh = new THREE.Mesh(diskGeo, ringMat)
         this.scanRingMesh.position.y = -12.5
         this.scanRingMesh.renderOrder = 0
         this.scene.add(this.scanRingMesh)
+
+        const focusHaloGeo = new THREE.RingGeometry(0.7, 1, 64)
+        focusHaloGeo.rotateX(-Math.PI / 2)
+        const focusHaloMat = new THREE.MeshBasicMaterial({
+            color: 0x86d8ff,
+            transparent: true,
+            opacity: 0,
+            blending: THREE.AdditiveBlending,
+            side: THREE.DoubleSide,
+            depthWrite: false,
+        })
+        this.focusHaloMesh = new THREE.Mesh(focusHaloGeo, focusHaloMat)
+        this.focusHaloMesh.visible = false
+        this.focusHaloMesh.renderOrder = 5
+        this.networkGroup.add(this.focusHaloMesh)
     }
 
     // ── 资源缓存 ──────────────────────────────────
@@ -285,19 +315,61 @@ export class TopologyRenderer {
         return this.resourceCache.materials.get(key)
     }
 
+    makeLineGradientColors(startHex, endHex, segments) {
+        const start = new THREE.Color(startHex)
+        const end = new THREE.Color(endHex)
+        const colors = []
+        for (let i = 0; i <= segments; i++) {
+            const t = i / Math.max(segments, 1)
+            const ease = 0.5 - 0.5 * Math.cos(t * Math.PI)
+            const color = start.clone().lerp(end, ease)
+            colors.push(color.r, color.g, color.b)
+        }
+        return new Float32Array(colors)
+    }
+
     cloneMaterialTemplate(key, factory) {
         return this.getMaterialTemplate(key, factory).clone()
+    }
+
+    worldToScreen(point) {
+        if (!this.camera || !this.renderer?.domElement) return null
+        const rect = this.renderer.domElement.getBoundingClientRect()
+        if (!rect.width || !rect.height) return null
+        const projected = point.clone().project(this.camera)
+        return {
+            x: ((projected.x + 1) / 2) * rect.width,
+            y: ((-projected.y + 1) / 2) * rect.height,
+            z: projected.z,
+        }
+    }
+
+    screenToWorld(x, y, ndcZ) {
+        if (!this.camera || !this.renderer?.domElement) return null
+        const rect = this.renderer.domElement.getBoundingClientRect()
+        if (!rect.width || !rect.height) return null
+        return new THREE.Vector3(
+            (x / rect.width) * 2 - 1,
+            -((y / rect.height) * 2 - 1),
+            ndcZ,
+        ).unproject(this.camera)
     }
 
     // ── 模型 setter ───────────────────────────────
     setTopologyModel(model) {
         this.model = model || null
+        this.labelLayoutDirty = true
         this.rebuild()
         this.updateHighlightState()
     }
 
     setAutoRotate(en) { this.autoRotate = Boolean(en) }
     toggleAutoRotate() { this.autoRotate = !this.autoRotate; return this.autoRotate }
+
+    setPointerParallax(nx, ny) {
+        this.pointerParallaxTarget.x = clamp(nx, -1, 1)
+        this.pointerParallaxTarget.y = clamp(ny, -1, 1)
+    }
 
     // ── 节点过滤（动画隐藏） ──────────────────────
     /**
@@ -306,19 +378,22 @@ export class TopologyRenderer {
      */
     setNodeFilter(filterFn) {
         this.nodeFilter = filterFn || null
+        this.labelLayoutDirty = true
         this.updateHighlightState()
     }
 
     // ── 选中状态 ──────────────────────────────────
-    setHoveredNodeId(id) { this.activeNodeState.hoveredNodeId = id || ''; this.updateHighlightState() }
-    setFocusedNodeId(id) { this.activeNodeState.focusedNodeId = id || ''; this.updateHighlightState() }
+    setHoveredNodeId(id) { this.activeNodeState.hoveredNodeId = id || ''; this.labelLayoutDirty = true; this.updateHighlightState() }
+    setFocusedNodeId(id) { this.activeNodeState.focusedNodeId = id || ''; this.labelLayoutDirty = true; this.updateHighlightState() }
     setPinnedNodeId(id) {
         this.activeNodeState.pinnedNodeId = id || ''
         if (this.activeNodeState.pinnedNodeId) this.activeNodeState.focusedNodeId = id
+        this.labelLayoutDirty = true
         this.updateHighlightState()
     }
     clearSelection() {
         this.activeNodeState = { hoveredNodeId: '', focusedNodeId: '', pinnedNodeId: '' }
+        this.labelLayoutDirty = true
         this.updateHighlightState()
     }
 
@@ -420,25 +495,25 @@ export class TopologyRenderer {
             const riskLevel = node.risk_level || 'low'
             const position = ensureVector(node, this.nodeRecords.length, nodes.length)
             const finalRadius = style.radius * radiusScale
+            const labelLayer = LABEL_LAYER_ORDER[nodeType] || 0
+            const labelDepthLift = nodeType === 'core' ? 2.4 : nodeType === 'db_type' ? 1.7 : 1.1
+            const labelSideBias = (this.nodeRecords.length % 3) - 1
 
             // 主体球
             const geo = this.getSphereGeometry(finalRadius, 20, 20)
             const mat = this.cloneMaterialTemplate(`node:${nodeType}`, () =>
-                new THREE.MeshPhysicalMaterial({
+                new THREE.MeshStandardMaterial({
                     color: style.color,
                     transparent: true,
-                    opacity: 0.72,
-                    roughness: 0.12,
-                    metalness: 0.08,
-                    transmission: 0.7,
-                    ior: 1.22,
-                    thickness: 1.2,
-                    clearcoat: 1,
-                    clearcoatRoughness: 0.2,
+                    roughness: 0.1,          // 极低的粗糙度，产生极其锐利的高光
+                    metalness: 0.85,         // 高金属度，增强对场景中点光源的反射率
                     emissive: new THREE.Color(style.color),
-                    emissiveIntensity: 0.22,
+                    emissiveIntensity: 0.15,
+                    side: THREE.DoubleSide,  // 【关键技巧】开启双面渲染，渲染球体背面会产生类似玻璃厚度和内部折射的视觉错觉
+                    depthWrite: false,       // 关闭深度写入，消除多个透明球体叠加时的 Z-fighting 闪烁，增强全息能量感
                 })
             )
+
             const mesh = new THREE.Mesh(geo, mat)
             mesh.position.copy(position)
             mesh.renderOrder = 2
@@ -484,7 +559,12 @@ export class TopologyRenderer {
             let labelSprite = null
             if (nodeType === 'core' || nodeType === 'db_type' || labelNodeIds.has(nodeId)) {
                 labelSprite = createCanvasTextSprite(node.name || nodeId, style.labelColor, { scale: style.labelScale })
-                if (labelSprite) { labelSprite.position.copy(position); labelSprite.position.y += finalRadius + 1.1 }
+                if (labelSprite) {
+                    labelSprite.position.copy(position)
+                    labelSprite.position.y += finalRadius + labelDepthLift
+                    labelSprite.position.x += labelSideBias * 0.6
+                    labelSprite.renderOrder = 3 + labelLayer
+                }
             }
 
             this.networkGroup.add(mesh, glowMesh, coreMesh)
@@ -497,6 +577,9 @@ export class TopologyRenderer {
                 value: node.value, degree,
                 riskLevel, riskStyle, radiusScale, finalRadius,
                 mesh, glowMesh, coreMesh, auraRing, labelSprite,
+                labelLayer,
+                labelDepthLift,
+                labelSideBias,
                 breathPhase: Math.random() * Math.PI * 2,
                 style,
                 glowOpBase,
@@ -509,6 +592,7 @@ export class TopologyRenderer {
                 curCoreOp: coreMat.opacity, tgtCoreOp: coreMat.opacity,
                 curAuraOp: 0.07, tgtAuraOp: 0.07,
                 curLabelOp: 0.96, tgtLabelOp: 0.96,
+                curLabelScale: style.labelScale || 1,
             }
 
             this.nodeRecords.push(record)
@@ -529,11 +613,25 @@ export class TopologyRenderer {
             const bOp = clamp(sev.baseOpacity * (0.36 + nw * 0.68), 0.14, 0.92)
 
             const curve = buildBezierCurve(from, to)
-            const lineGeo = new THREE.BufferGeometry().setFromPoints(curve.getPoints(BEZIER_SEGMENTS))
-            const lineMat = new THREE.LineBasicMaterial({ color: sev.color, transparent: true, opacity: bOp })
+            const linePoints = curve.getPoints(BEZIER_SEGMENTS)
+            const lineGeo = new THREE.BufferGeometry().setFromPoints(linePoints)
+            lineGeo.setAttribute('color', new THREE.BufferAttribute(this.makeLineGradientColors(sev.color, 0xb8f2ff, BEZIER_SEGMENTS), 3))
+            const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: bOp, vertexColors: true, blending: THREE.AdditiveBlending })
             const line = new THREE.Line(lineGeo, lineMat)
             line.renderOrder = 0
             this.networkGroup.add(line)
+
+            const lineTubeGeo = new THREE.TubeGeometry(curve, 16, 0.055 + nw * 0.035, 3, false)
+            const lineTubeMat = new THREE.MeshBasicMaterial({
+                color: sev.color,
+                transparent: true,
+                opacity: bOp * 0.34,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false,
+            })
+            const lineTube = new THREE.Mesh(lineTubeGeo, lineTubeMat)
+            lineTube.renderOrder = 0
+            this.networkGroup.add(lineTube)
 
             // 中点标记
             const markerR = 0.08 + nw * 0.22
@@ -577,7 +675,8 @@ export class TopologyRenderer {
                 sourceId: String(link.source), targetId: String(link.target),
                 severity: String(link.severity || 'low'),
                 weight, normalizedWeight: nw, color: sev.color, baseOpacity: bOp,
-                line, markerMesh, curve,
+                line, lineTube, markerMesh, curve,
+                lineColors: lineGeo.attributes.color,
                 flowSpeed: 0.007 + nw * 0.018,
                 pulseMesh,
                 pulseTail,
@@ -585,6 +684,7 @@ export class TopologyRenderer {
                 pulseSpeed: 0.17 + nw * 0.28,
                 // 动画
                 curLineOp: bOp, tgtLineOp: bOp,
+                curLineTubeOp: bOp * 0.34, tgtLineTubeOp: bOp * 0.34,
                 curMarkerOp: 0.2 + nw * 0.55, tgtMarkerOp: 0.2 + nw * 0.55,
                 curPulseStrength: getRiskPulseBias(link.risk_level || link.severity),
                 tgtPulseStrength: getRiskPulseBias(link.risk_level || link.severity),
@@ -653,29 +753,35 @@ export class TopologyRenderer {
             // 2. 高亮逻辑
             const isActive = r.id === activeId
             const isRelated = related ? related.has(r.id) : true
+            const distanceWeight = !hasActive ? 1 : isActive ? 1 : isRelated ? 0.72 : 0.34
 
-            r.tgtScale = !hasActive ? 1 : isActive ? 1.5 : isRelated ? 1.1 : 0.82
-            r.tgtOpacity = !hasActive ? 0.95 : isActive ? 1 : isRelated ? 0.88 : 0.22
+            r.tgtScale = !hasActive ? 1 : isActive ? 1.28 : isRelated ? 1.06 : 0.9
+            r.tgtOpacity = !hasActive ? 0.92 : isActive ? 0.96 : isRelated ? 0.82 : 0.26
 
             const gBase = r.glowOpBase
             r.tgtGlowOp = !hasActive ? gBase
-                : isActive ? clamp(gBase * 2.0, 0.06, 0.72)
-                    : isRelated ? clamp(gBase * 1.2, 0.04, 0.55)
-                        : gBase * 0.28
+                : isActive ? clamp(gBase * 1.55, 0.08, 0.62)
+                    : isRelated ? clamp(gBase * 1.08, 0.05, 0.44)
+                        : gBase * 0.18
 
             const cBase = r.coreOpBase
             r.tgtCoreOp = !hasActive ? cBase
-                : isActive ? clamp(cBase * 1.9, 0.3, 1)
-                    : isRelated ? clamp(cBase * 1.25, 0.24, 0.82)
-                        : cBase * 0.32
+                : isActive ? clamp(cBase * 1.35, 0.22, 0.82)
+                    : isRelated ? clamp(cBase * 1.06, 0.18, 0.62)
+                        : cBase * 0.24
 
-            r.tgtAuraOp = !hasActive ? 0.07 : isActive ? 0.20 : isRelated ? 0.09 : 0.02
-            r.tgtLabelOp = !hasActive ? 0.96 : isActive || isRelated ? 1.0 : 0.14
+            r.tgtAuraOp = !hasActive ? 0.07 : isActive ? 0.14 : isRelated ? 0.07 : 0.015
+            r.tgtLabelOp = !hasActive ? 0.92 : isActive ? 0.98 : isRelated ? 0.82 : 0.1
+            r.tgtLabelScale = !hasActive ? 1 : isActive ? 1.04 : isRelated ? 0.98 : 0.86
+            r.tgtLabelLift = !hasActive ? r.labelDepthLift : isActive ? r.labelDepthLift + 0.32 : isRelated ? r.labelDepthLift + 0.08 : r.labelDepthLift - 0.18
+            r.tgtLabelSide = r.labelSideBias * (isActive ? 0.55 : isRelated ? 0.34 : 0.16)
+            r.tgtLabelWeight = distanceWeight
         }
 
         for (const r of this.linkRecords) {
             const isActive = !hasActive || r.sourceId === activeId || r.targetId === activeId
-            r.tgtLineOp = !hasActive ? r.baseOpacity : isActive ? clamp(r.baseOpacity + 0.26, 0.2, 1) : 0.04
+            r.tgtLineOp = !hasActive ? r.baseOpacity : isActive ? clamp(r.baseOpacity + 0.18, 0.22, 0.92) : 0.05
+            r.tgtLineTubeOp = !hasActive ? r.baseOpacity * 0.34 : isActive ? clamp(r.baseOpacity * 0.54, 0.12, 0.5) : 0.03
             r.tgtMarkerOp = !hasActive ? 0.2 + r.normalizedWeight * 0.55
                 : isActive ? clamp(0.25 + r.normalizedWeight * 0.62, 0.15, 1) : 0.04
             r.tgtPulseStrength = !hasActive
@@ -684,6 +790,8 @@ export class TopologyRenderer {
                     ? clamp(getRiskPulseBias(r.severity) + 0.32, 0.32, 1)
                     : 0.18
         }
+
+        this.labelLayoutDirty = true
     }
 
     // ── Lerp 动画：每帧逼近目标值 ─────────────────
@@ -698,24 +806,33 @@ export class TopologyRenderer {
             r.curCoreOp = lerp(r.curCoreOp, r.tgtCoreOp, lsp)
             r.curAuraOp = lerp(r.curAuraOp, r.tgtAuraOp, lsp)
             r.curLabelOp = lerp(r.curLabelOp, r.tgtLabelOp, lsp)
+            r.curLabelScale = lerp(r.curLabelScale ?? 1, r.tgtLabelScale ?? 1, lspFast)
+            r.curLabelLift = lerp(r.curLabelLift ?? r.labelDepthLift, r.tgtLabelLift ?? r.labelDepthLift, lsp)
+            r.curLabelSide = lerp(r.curLabelSide ?? r.labelSideBias, r.tgtLabelSide ?? r.labelSideBias, lsp)
+            r.curLabelWeight = lerp(r.curLabelWeight ?? 1, r.tgtLabelWeight ?? 1, lsp)
 
             r.mesh.scale.setScalar(r.curScale)
-            r.mesh.material.opacity = r.curOpacity
+            r.mesh.material.opacity = clamp(r.curOpacity * (0.55 + r.curLabelWeight * 0.15), 0.12, 0.75)
             r.glowMesh.material.opacity = r.curGlowOp
             r.coreMesh.material.opacity = r.curCoreOp
             r.coreMesh.scale.setScalar(clamp(0.92 + r.curScale * 0.14, 0.76, 1.24))
             if (r.auraRing) r.auraRing.material.opacity = r.curAuraOp
             if (r.labelSprite) {
                 r.labelSprite.material.opacity = r.curLabelOp
-                r.labelSprite.visible = r.curScale > 0.05
+                r.labelSprite.visible = r.curScale > 0.05 && r.curLabelOp > 0.03
+                const labelBase = (r.style.labelScale || 1) * r.curLabelScale
+                const aspect = r.labelSprite.userData?.aspect || 1
+                r.labelSprite.scale.set(aspect * labelBase, labelBase, 1)
             }
         }
 
         for (const r of this.linkRecords) {
             r.curLineOp = lerp(r.curLineOp, r.tgtLineOp, lsp)
+            r.curLineTubeOp = lerp(r.curLineTubeOp, r.tgtLineTubeOp, lsp)
             r.curMarkerOp = lerp(r.curMarkerOp, r.tgtMarkerOp, lsp)
             r.curPulseStrength = lerp(r.curPulseStrength, r.tgtPulseStrength, lspFast)
             r.line.material.opacity = r.curLineOp
+            r.lineTube.material.opacity = r.curLineTubeOp
             r.markerMesh.material.opacity = r.curMarkerOp
         }
     }
@@ -731,6 +848,9 @@ export class TopologyRenderer {
             const glowFinal = r.curGlowOp * (1 + breath * amplitude)
             r.glowMesh.material.opacity = clamp(glowFinal, 0.02, 0.72)
             r.coreMesh.material.opacity = clamp(r.curCoreOp * (1.05 + breath * (amplitude * 0.66)), 0.06, 1)
+            if (typeof r.mesh.material.emissiveIntensity === 'number') {
+                r.mesh.material.emissiveIntensity = clamp(0.18 + r.curCoreOp * 0.42 + breath * 0.08, 0.12, 0.95)
+            }
 
             if (r.auraRing) {
                 const aura = Math.sin(t * 0.8 + r.breathPhase + Math.PI * 0.5)
@@ -740,6 +860,128 @@ export class TopologyRenderer {
         }
     }
 
+    updateFocusHalo(ts) {
+        if (!this.focusHaloMesh) return
+        const activeNodeId = this.getActiveNodeId()
+        const activeNode = activeNodeId ? this.getNodeRecord(activeNodeId) : null
+        if (!activeNode || activeNode.curScale < 0.05) {
+            this.focusHaloMesh.visible = false
+            this.focusHaloMesh.material.opacity = 0
+            return
+        }
+
+        const risk = getRiskPulseBias(activeNode.riskLevel)
+        const pulse = 0.5 + Math.sin(ts * 0.004 + this.focusHaloPulse) * 0.5
+        const scale = activeNode.finalRadius * (2.4 + risk * 0.72 + pulse * 0.18)
+        this.focusHaloMesh.visible = true
+        this.focusHaloMesh.position.copy(activeNode.mesh.position)
+        this.focusHaloMesh.position.y = activeNode.mesh.position.y - activeNode.finalRadius * 0.62
+        this.focusHaloMesh.scale.setScalar(scale)
+        this.focusHaloMesh.material.color.setHex(activeNode.riskLevel === 'critical' ? 0xff5a72 : activeNode.riskLevel === 'high' ? 0xff945f : 0x86d8ff)
+        this.focusHaloMesh.material.opacity = clamp(0.16 + risk * 0.2 + pulse * 0.11, 0.14, 0.52)
+    }
+
+    updateLabelLayout(force = false, now = performance.now()) {
+        if (!this.camera || !this.renderer?.domElement || !this.nodeRecords.length) return
+        if (!force) {
+            const moving = Boolean(this.autoRotate || this.cameraTween || this.isUserInteracting)
+            if (!this.labelLayoutDirty && !moving && now - this.labelLayoutLastRun < 80) return
+            if (moving && now - this.labelLayoutLastRun < 33) return
+            if (!moving && now - this.labelLayoutLastRun < 80) return
+        }
+
+        this.labelLayoutLastRun = now
+        this.labelLayoutDirty = false
+
+        const candidates = []
+        for (const r of this.nodeRecords) {
+            if (!r.labelSprite || !r.labelSprite.visible || r.curLabelOp < 0.02) continue
+            const baseWorld = new THREE.Vector3(
+                r.mesh.position.x + r.curLabelSide * 0.6,
+                r.mesh.position.y + r.finalRadius + r.curLabelLift,
+                r.mesh.position.z + r.curLabelSide * 0.18,
+            )
+            const screen = this.worldToScreen(baseWorld)
+            if (!screen) continue
+
+            const width = Math.max(96, (r.labelSprite.userData?.pixelWidth || 120) * (r.labelSprite.scale.x / Math.max(r.labelSprite.userData?.aspect || 1, 1)))
+            const height = Math.max(24, (r.labelSprite.userData?.pixelHeight || 40) * (r.labelSprite.scale.y / Math.max(r.labelSprite.userData?.baseScale || 1, 1)))
+            const priority = (r.labelLayer || 0) * 10 + (r.curLabelWeight || 1) * 6 + (r.curLabelOp || 0) * 3
+            candidates.push({ r, baseWorld, screen, width, height, priority })
+        }
+
+        candidates.sort((a, b) => b.priority - a.priority || a.screen.y - b.screen.y || a.screen.x - b.screen.x)
+
+        const placed = []
+        for (const item of candidates) {
+            let offsetX = 0
+            let offsetY = 0
+            let attempts = 0
+            const maxAttempts = 6
+
+            const collision = () => placed.some((other) => {
+                const xOverlap = Math.abs((item.screen.x + offsetX) - other.x) < (item.width + other.width) / 2 + LABEL_COLLISION_PADDING
+                const yOverlap = Math.abs((item.screen.y + offsetY) - other.y) < (item.height + other.height) / 2 + LABEL_BASE_GAP
+                return xOverlap && yOverlap
+            })
+
+            while (attempts < maxAttempts && collision()) {
+                const direction = (attempts % 2 === 0 ? 1 : -1)
+                offsetY += direction * (LABEL_BASE_GAP + attempts * 4)
+                offsetX += (item.r.labelSideBias || 0) * (LABEL_BASE_GAP * 0.35 + attempts * 1.6)
+                attempts += 1
+            }
+
+            const adjusted = this.screenToWorld(item.screen.x + offsetX, item.screen.y + offsetY, item.screen.z)
+            if (adjusted) {
+                item.r.labelSprite.position.copy(adjusted)
+                item.r.labelSprite.position.x += item.r.curLabelSide * 0.08
+                item.r.labelSprite.position.y += item.r.curLabelWeight * 0.08
+            }
+
+            placed.push({
+                x: item.screen.x + offsetX,
+                y: item.screen.y + offsetY,
+                width: item.width,
+                height: item.height,
+            })
+        }
+    }
+
+    updateDepthAtmosphere() {
+        const activeNode = this.getActiveNodeRecord()
+        const activeWeight = activeNode ? getRiskPulseBias(activeNode.riskLevel) : 0.34
+        const nextNear = activeNode ? 46 - activeWeight * 3.6 : 62
+        const nextFar = activeNode ? 122 - activeWeight * 10 : 148
+        this.depthFocus = lerp(this.depthFocus, activeNode ? 1 : 0, 0.08)
+        if (this.scene?.fog) {
+            this.scene.fog.near = lerp(this.scene.fog.near, nextNear, 0.08)
+            this.scene.fog.far = lerp(this.scene.fog.far, nextFar, 0.08)
+        }
+        if (this.camera) {
+            const targetFov = activeNode ? 50.5 : 52
+            this.camera.fov = lerp(this.camera.fov, targetFov, 0.05)
+            this.camera.updateProjectionMatrix()
+        }
+        if (this.starField) {
+            this.starField.material.size = lerp(this.starField.material.size, activeNode ? 0.38 : 0.46, 0.08)
+        }
+        if (this.deepStarField) {
+            this.deepStarField.material.size = lerp(this.deepStarField.material.size, activeNode ? 0.24 : 0.28, 0.08)
+        }
+        this.labelLayoutDirty = true
+    }
+
+    updatePointerParallax(delta) {
+        if (!this.networkGroup) return
+        const ease = clamp(delta * 4.8, 0, 1)
+        this.pointerParallax.lerp(this.pointerParallaxTarget, ease)
+        const targetX = this.pointerParallax.y * 0.08
+        const targetZ = -this.pointerParallax.x * 0.12
+        this.networkGroup.rotation.x = lerp(this.networkGroup.rotation.x, targetX, ease)
+        this.networkGroup.rotation.z = lerp(this.networkGroup.rotation.z, targetZ, ease)
+    }
+
     // ── 扫描光环动画 ──────────────────────────────
     updateScanRing(delta) {
         if (!this.scanRingMesh) return
@@ -747,11 +989,9 @@ export class TopologyRenderer {
         if (this.scanRingT > 1) this.scanRingT = 0
 
         const t = this.scanRingT
-        const radius = t * SCAN_RING_MAX_RADIUS
-        // 透明度：出发时淡入，接近边界时淡出
-        const alpha = Math.sin(t * Math.PI) * 0.45
+        const alpha = 0.16 + Math.sin(t * Math.PI) * 0.16
 
-        this.scanRingMesh.scale.setScalar(radius < 0.1 ? 0.1 : radius)
+        this.scanRingMesh.scale.setScalar(1)
         this.scanRingMesh.material.opacity = alpha
     }
 
@@ -805,12 +1045,6 @@ export class TopologyRenderer {
             this.deepStarField.material.opacity = 0.18 + Math.sin(t * 0.6 + 1.2) * 0.06
             this.deepStarField.rotation.y += 0.00008
         }
-        if (this.nebulaLayers.length) {
-            this.nebulaLayers.forEach((layer, idx) => {
-                layer.rotation.z += 0.00009 * (idx === 0 ? 1 : -0.8)
-                layer.material.opacity = (idx === 0 ? 0.08 : 0.06) + Math.sin(t * (0.72 + idx * 0.18)) * 0.015
-            })
-        }
     }
 
     // ── 主循环 ────────────────────────────────────
@@ -823,11 +1057,15 @@ export class TopologyRenderer {
         }
 
         this.updateAnimations(delta)
+        this.updatePointerParallax(delta)
         this.updateBreathingGlow(ts)
+        this.updateFocusHalo(ts)
+        this.updateDepthAtmosphere()
         this.updateLinkPulses(ts)
         this.updateFlowParticles()
         this.updateScanRing(delta)
         this.updateStarTwinkle(ts)
+        this.updateLabelLayout(false, ts)
 
         this.renderer.render(this.scene, this.camera)
     }
@@ -840,6 +1078,13 @@ export class TopologyRenderer {
         this.camera.aspect = w / Math.max(h, 1)
         this.camera.updateProjectionMatrix()
         this.renderer.setSize(w, h)
+
+        // 【新增】动态像素比：大屏/全屏状态下（画布像素 > 约190万）限制像素比为 1.0 保障流畅度
+        const isLargeScreen = w * h > 1900000
+        const cap = this.options.pixelRatioCap || 1.5
+        const targetPixelRatio = isLargeScreen ? 1.0 : Math.min(window.devicePixelRatio || 1, cap)
+
+        this.renderer.setPixelRatio(targetPixelRatio)
     }
 
     startLoop() {
@@ -878,12 +1123,14 @@ export class TopologyRenderer {
         }
         this.scene = null; this.camera = null; this.renderer = null
         this.networkGroup = null; this.starField = null; this.deepStarField = null; this.scanRingMesh = null
+        this.focusHaloMesh = null
         this.nebulaLayers = []
         this.container = null; this.model = null; this.flowParticles = []
         this.linkPulses = []
         this.nodeRecords = []; this.nodeRecordMap = new Map()
         this.linkRecords = []; this.adjacencyMap = new Map()
         this.activeNodeState = { hoveredNodeId: '', focusedNodeId: '', pinnedNodeId: '' }
+        this.labelLayoutDirty = true
         for (const g of this.resourceCache.geometries.values()) g.dispose()
         this.resourceCache.geometries.clear()
         for (const m of this.resourceCache.materials.values()) disposeMaterial(m)

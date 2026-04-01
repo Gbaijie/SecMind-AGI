@@ -19,6 +19,9 @@ export class TopologyInteraction extends TopologyRenderer {
         this.onNodeStateChange = options.onNodeStateChange || null
         this.onStatusChange = options.onStatusChange || null
         this.onNodeSelect = options.onNodeSelect || null
+        this.onAutoRotateChange = options.onAutoRotateChange || null
+
+        this.navigationHistory = []
 
         this.controls = null
         this.raycaster = new THREE.Raycaster()
@@ -46,7 +49,7 @@ export class TopologyInteraction extends TopologyRenderer {
         this.domElement = this.renderer.domElement
         this.controls = new OrbitControls(this.camera, this.domElement)
         this.controls.enableDamping = true
-        this.controls.dampingFactor = 0.05
+        this.controls.dampingFactor = 0.1
         this.controls.minDistance = 20
         this.controls.maxDistance = 150
         this.controls.enablePan = false
@@ -72,18 +75,28 @@ export class TopologyInteraction extends TopologyRenderer {
 
     setTopologyModel(model) {
         super.setTopologyModel(model)
+        this.navigationHistory = []
+        this._autoRotatePaused = false
         this.emitStatus()
     }
 
     setAutoRotate(enabled) {
         super.setAutoRotate(enabled)
-        this.emitStatus()
+        this.emitAutoRotateChange()
+        this.emitStatus(enabled ? 'AUTO ROTATE ON' : 'AUTO ROTATE OFF')
     }
 
     toggleAutoRotate() {
         const next = super.toggleAutoRotate()
-        this.emitStatus()
+        this.emitAutoRotateChange()
+        this.emitStatus(next ? 'AUTO ROTATE ON' : 'AUTO ROTATE OFF')
         return next
+    }
+
+    emitAutoRotateChange() {
+        if (typeof this.onAutoRotateChange === 'function') {
+            this.onAutoRotateChange(this.autoRotate)
+        }
     }
 
     handlePointerMove(event) {
@@ -95,6 +108,7 @@ export class TopologyInteraction extends TopologyRenderer {
         this.pointerInside = true
         this.pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1
         this.pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1
+        this.setPointerParallax(this.pointer.x, this.pointer.y)
         this.lastPointerClient = { x: event.clientX - rect.left, y: event.clientY - rect.top }
         this.pointerMoved = true
     }
@@ -102,6 +116,7 @@ export class TopologyInteraction extends TopologyRenderer {
     handlePointerLeave() {
         this.pointerInside = false
         this.pointer.set(2, 2)
+        this.setPointerParallax(0, 0)
         this.setHoveredNodeId('')
 
         const activeNodeId = this.getActiveNodeId()
@@ -132,7 +147,12 @@ export class TopologyInteraction extends TopologyRenderer {
             return
         }
 
-        this.focusNode(hit.id, { pin: false, source: 'click' })
+        const currentFocusId = this.getCurrentFocusNodeId()
+        if (currentFocusId && hit.id === currentFocusId) {
+            this.navigateBackFromFocus()
+        } else {
+            this.navigateToNode(hit.id, { pin: false, source: 'click' })
+        }
         if (typeof this.onNodeSelect === 'function') {
             this.onNodeSelect(hit)
         }
@@ -157,6 +177,59 @@ export class TopologyInteraction extends TopologyRenderer {
         const mesh = hits[0].object
         const nodeId = String(mesh.userData?.id || '')
         return this.getNodeRecord(nodeId)
+    }
+
+    getCurrentFocusNodeId() {
+        return this.activeNodeState.pinnedNodeId || this.activeNodeState.focusedNodeId || ''
+    }
+
+    getRootFocusNodeId() {
+        const nodes = Array.isArray(this.model?.nodes) ? this.model.nodes : []
+        const rootNode = nodes.find((node) => String(node?.type || '').toLowerCase() === 'core')
+        return String(rootNode?.id || '')
+    }
+
+    navigateToNode(nodeId, options = {}) {
+        const targetId = String(nodeId || '')
+        if (!targetId) return false
+
+        const isClickNavigation = options.source === 'click'
+        const currentFocusId = this.getCurrentFocusNodeId()
+
+        if (isClickNavigation) {
+            this.navigationHistory.push(currentFocusId || null)
+            if (!this._autoRotatePaused) {
+                this._autoRotatePaused = Boolean(this.autoRotate)
+            }
+            if (this.autoRotate) {
+                this.setAutoRotate(false)
+            }
+        }
+
+        const focused = this.focusNode(targetId, options)
+        if (!focused && isClickNavigation) {
+            this.navigationHistory.pop()
+        }
+        return focused
+    }
+
+    navigateBackFromFocus() {
+        const previousFocusId = this.navigationHistory.pop()
+        if (previousFocusId) {
+            return this.focusNode(previousFocusId, { pin: false, source: 'history' })
+        }
+
+        const rootFocusId = this.getRootFocusNodeId()
+        if (rootFocusId && this.getCurrentFocusNodeId() !== rootFocusId) {
+            return this.focusNode(rootFocusId, { pin: false, source: 'history' })
+        }
+
+        this.clearSelection()
+        if (this._autoRotatePaused) {
+            this.setAutoRotate(true)
+            this._autoRotatePaused = false
+        }
+        return true
     }
 
     focusNode(nodeId, options = {}) {
@@ -215,6 +288,16 @@ export class TopologyInteraction extends TopologyRenderer {
             controlTarget,
         }
 
+        // 如果是用户点击触发的聚焦，临时暂停自动旋转并记住之前状态，以便稍后恢复
+        if (options.source === 'click') {
+            if (!this._autoRotatePaused) {
+                this._autoRotatePaused = Boolean(this.autoRotate)
+            }
+            if (this.autoRotate) {
+                this.setAutoRotate(false)
+            }
+        }
+
         this.setHoveredNodeId(record.id)
         this.controls.target.copy(targetPosition)
         this.emitNodeState(
@@ -265,6 +348,11 @@ export class TopologyInteraction extends TopologyRenderer {
                 this.emitNodeState({ show: false })
             }
             this.emitStatus(`UNPINNED: ${this.getNodeRecord(targetId)?.name || targetId}`)
+            // 如果之前因点击而暂停了自动旋转，取消 pin 时恢复
+            if (this._autoRotatePaused) {
+                this.setAutoRotate(this._autoRotatePaused)
+                this._autoRotatePaused = false
+            }
             return true
         }
 
@@ -273,7 +361,13 @@ export class TopologyInteraction extends TopologyRenderer {
 
     clearSelection() {
         super.clearSelection()
+        this.navigationHistory = []
         this.emitNodeState({ show: false })
+        // 恢复因为点击暂停的自动旋转（如果有）
+        if (this._autoRotatePaused) {
+            this.setAutoRotate(this._autoRotatePaused)
+            this._autoRotatePaused = false
+        }
         this.emitStatus('READY')
     }
 
@@ -341,7 +435,8 @@ export class TopologyInteraction extends TopologyRenderer {
         if (hits.length > 0) {
             const mesh = hits[0].object
             const nodeId = String(mesh.userData?.id || '')
-            if (nodeId && this.activeNodeState.hoveredNodeId !== nodeId) {
+            if (nodeId) {
+                const changed = this.activeNodeState.hoveredNodeId !== nodeId
                 this.setHoveredNodeId(nodeId)
                 const isPinned = this.activeNodeState.pinnedNodeId === nodeId
                 const isFocused = this.activeNodeState.focusedNodeId === nodeId
@@ -356,7 +451,9 @@ export class TopologyInteraction extends TopologyRenderer {
                         },
                     }),
                 )
-                this.emitStatus(`${mode.toUpperCase()}: ${this.getNodeRecord(nodeId)?.name || nodeId}`)
+                if (changed) {
+                    this.emitStatus(`${mode.toUpperCase()}: ${this.getNodeRecord(nodeId)?.name || nodeId}`)
+                }
             }
             return
         }
@@ -404,9 +501,27 @@ export class TopologyInteraction extends TopologyRenderer {
             this.controls.update()
         }
         if (this.autoRotate || this.cameraTween || this.isUserInteracting) {
-            this.pointerMoved = true
+            // 增加节流：每 100ms 触发一次自动射线检测，而不是每帧 16ms
+            if (!this._lastAutoRaycast || timestamp - this._lastAutoRaycast > 100) {
+                this.pointerMoved = true
+                this._lastAutoRaycast = timestamp
+            }
         }
         this.updateRaycast()
+        if (!this.pointerInside) {
+            this.setPointerParallax(0, 0)
+        }
+
+        const lockedNodeId = this.activeNodeState.pinnedNodeId || this.activeNodeState.focusedNodeId
+        if (lockedNodeId) {
+            this.emitNodeState(
+                this.getNodeTooltipPayload(lockedNodeId, {
+                    locked: true,
+                    mode: this.activeNodeState.pinnedNodeId ? 'pin' : 'focus',
+                    position: this.projectNodeToScreen(lockedNodeId),
+                }),
+            )
+        }
         super.update(timestamp)
     }
 

@@ -20,7 +20,7 @@
 
       <div class="toolbar-actions">
         <button class="toolbar-button" type="button" :class="{ active: autoRotateEnabled }" @click="toggleAutoRotate">
-          {{ autoRotateEnabled ? 'AUTO ROTATE ON' : 'AUTO ROTATE OFF' }}
+          {{ autoRotateEnabled ? 'ROTATE ON' : 'ROTATE OFF' }}
         </button>
         <button class="toolbar-button" type="button" :disabled="!hasActiveSelection" @click="handlePinToggle">
           {{ pinButtonLabel }}
@@ -225,7 +225,17 @@ const handleNodeStateChange = (payload) => {
 }
 
 const handleStatusChange = (text) => {
-  statusText.value = text || 'READY'
+  const t = text || 'READY'
+  statusText.value = t
+  if (t === 'AUTO ROTATE ON') {
+    autoRotateEnabled.value = true
+  } else if (t === 'AUTO ROTATE OFF') {
+    autoRotateEnabled.value = false
+  }
+}
+
+const handleAutoRotateChange = (enabled) => {
+  autoRotateEnabled.value = Boolean(enabled)
 }
 
 // ── 风险等级过滤 ──────────────────────────────────
@@ -284,6 +294,7 @@ onMounted(() => {
   topologyEngine = new TopologyInteraction({
     onNodeStateChange: handleNodeStateChange,
     onStatusChange: handleStatusChange,
+    onAutoRotateChange: handleAutoRotateChange,
   })
 
   topologyEngine.mount(mountRef.value)
@@ -363,6 +374,7 @@ onBeforeUnmount(() => {
   gap: 5px;
   flex-wrap: wrap;
   pointer-events: auto;
+  animation: panel-slide-in 540ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
 .filter-label {
@@ -447,6 +459,18 @@ onBeforeUnmount(() => {
   pointer-events: none;
 }
 
+.topology-toolbar::before {
+  content: '';
+  position: absolute;
+  inset: -4px -2px -4px -2px;
+  border-radius: 10px;
+  border: 1px solid rgba(116, 205, 255, 0.16);
+  background: linear-gradient(135deg, rgba(6, 18, 36, 0.7), rgba(6, 16, 32, 0.34));
+  backdrop-filter: blur(10px) saturate(122%);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18), inset 0 0 0 1px rgba(162, 229, 255, 0.06);
+  pointer-events: none;
+}
+
 .toolbar-search,
 .toolbar-actions {
   display: flex;
@@ -454,6 +478,9 @@ onBeforeUnmount(() => {
   gap: 6px;
   pointer-events: auto;
   flex-wrap: wrap;
+  animation: panel-slide-in 620ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  position: relative;
+  z-index: 1;
 }
 
 .toolbar-search {
@@ -465,14 +492,16 @@ onBeforeUnmount(() => {
   flex: 1 1 220px;
   min-width: 180px;
   height: 30px;
-  border: 1px solid rgba(0, 229, 255, 0.22);
-  background: linear-gradient(135deg, rgba(190, 228, 255, 0.08), rgba(8, 21, 44, 0.7));
+  border: 1px solid rgba(0, 229, 255, 0.18);
+  background: linear-gradient(135deg, rgba(190, 228, 255, 0.1), rgba(8, 21, 44, 0.74));
   color: #d8f5ff;
   padding: 0 10px;
   font-family: var(--font-mono);
   font-size: 0.58rem;
   letter-spacing: 0.04em;
   outline: none;
+  box-shadow: inset 0 0 0 1px rgba(160, 228, 255, 0.04);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease, background 0.18s ease;
 }
 
 .toolbar-input::placeholder {
@@ -481,7 +510,8 @@ onBeforeUnmount(() => {
 
 .toolbar-input:focus {
   border-color: rgba(0, 229, 255, 0.6);
-  box-shadow: 0 0 0 2px rgba(0, 229, 255, 0.08);
+  box-shadow: 0 0 0 2px rgba(0, 229, 255, 0.08), inset 0 0 0 1px rgba(160, 228, 255, 0.08);
+  transform: translateY(-1px);
 }
 
 .toolbar-button {
@@ -494,19 +524,26 @@ onBeforeUnmount(() => {
   font-size: 0.54rem;
   letter-spacing: 0.1em;
   white-space: nowrap;
-  transition: all 0.18s ease;
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, color 0.18s ease, background 0.18s ease;
+  box-shadow: inset 0 0 0 1px rgba(162, 229, 255, 0.04);
 }
 
 .toolbar-button:hover:not(:disabled) {
   border-color: rgba(0, 229, 255, 0.56);
   color: #d8f5ff;
-  box-shadow: 0 0 10px rgba(0, 229, 255, 0.12);
+  box-shadow: 0 0 10px rgba(0, 229, 255, 0.12), inset 0 0 0 1px rgba(162, 229, 255, 0.08);
+  transform: translateY(-1px);
+}
+
+.toolbar-button:active:not(:disabled) {
+  transform: translateY(0);
 }
 
 .toolbar-button.active {
   border-color: rgba(0, 255, 157, 0.55);
   color: #b8ffe4;
-  background: rgba(0, 255, 157, 0.08);
+  background: linear-gradient(135deg, rgba(0, 255, 157, 0.12), rgba(4, 24, 54, 0.68));
+  box-shadow: 0 0 12px rgba(0, 255, 157, 0.12), inset 0 0 0 1px rgba(180, 255, 228, 0.08);
 }
 
 .toolbar-button:disabled {
@@ -517,7 +554,7 @@ onBeforeUnmount(() => {
 .toolbar-button--primary {
   border-color: rgba(0, 255, 157, 0.38);
   color: #ccffe9;
-  background: rgba(0, 255, 157, 0.08);
+  background: linear-gradient(135deg, rgba(0, 255, 157, 0.12), rgba(6, 34, 58, 0.66));
 }
 
 .topology-tooltip {
@@ -534,6 +571,19 @@ onBeforeUnmount(() => {
   backdrop-filter: blur(9px) saturate(126%);
   color: #d8f5ff;
   transform: translate(0, 0);
+  overflow: hidden;
+  transition: opacity 0.18s ease, transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.topology-tooltip::after {
+  content: '';
+  position: absolute;
+  inset: -20% auto -20% -45%;
+  width: 46%;
+  background: linear-gradient(90deg, transparent, rgba(186, 235, 255, 0.24), transparent);
+  transform: skewX(-18deg);
+  animation: glass-sweep 3.6s ease-in-out infinite;
+  pointer-events: none;
 }
 
 .topology-tooltip--locked {
@@ -601,6 +651,8 @@ onBeforeUnmount(() => {
   border-radius: inherit;
   background: linear-gradient(90deg, #22d3ff, #5ba8ff);
   box-shadow: 0 0 8px rgba(56, 184, 255, 0.5);
+  transform-origin: left center;
+  animation: energy-pulse 1.8s ease-in-out infinite;
 }
 
 .tooltip-meta {
@@ -619,6 +671,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 7px;
   pointer-events: none;
+  animation: panel-slide-in 640ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
 .status-chip,
@@ -633,6 +686,8 @@ onBeforeUnmount(() => {
   font-family: var(--font-mono);
   font-size: 0.5rem;
   letter-spacing: 0.08em;
+  box-shadow: inset 0 0 0 1px rgba(160, 228, 255, 0.04);
+  transition: border-color 0.18s ease, color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
 }
 
 .status-chip {
@@ -648,6 +703,7 @@ onBeforeUnmount(() => {
   display: flex;
   gap: 8px;
   pointer-events: none;
+  animation: panel-slide-in 700ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
 .legend-block {
@@ -657,6 +713,22 @@ onBeforeUnmount(() => {
   border-radius: 5px;
   background: linear-gradient(135deg, rgba(192, 231, 255, 0.1), rgba(8, 29, 55, 0.76));
   backdrop-filter: blur(8px) saturate(120%);
+  position: relative;
+  overflow: hidden;
+  box-shadow: inset 0 0 0 1px rgba(160, 228, 255, 0.04);
+}
+
+.legend-block::after {
+  content: '';
+  position: absolute;
+  top: -30%;
+  left: -42%;
+  width: 38%;
+  height: 160%;
+  background: linear-gradient(90deg, transparent, rgba(201, 236, 255, 0.18), transparent);
+  transform: skewX(-16deg);
+  animation: glass-sweep 4.8s ease-in-out infinite;
+  pointer-events: none;
 }
 
 .legend-title {
@@ -773,6 +845,30 @@ onBeforeUnmount(() => {
   width: 7px;
   height: 7px;
   border-radius: 50%;
+}
+
+@keyframes glass-sweep {
+  0% { left: -48%; opacity: 0; }
+  12% { opacity: 1; }
+  30% { left: 128%; opacity: 0; }
+  100% { left: 128%; opacity: 0; }
+}
+
+@keyframes panel-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes energy-pulse {
+  0% { filter: brightness(0.9); }
+  50% { filter: brightness(1.18); }
+  100% { filter: brightness(0.9); }
 }
 
 @media (max-width: 900px) {

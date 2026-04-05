@@ -6,12 +6,13 @@
 
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from './stores/authStore'
-import Login from './views/Login.vue'
-import GlobalLayout from './layouts/GlobalLayout.vue'
-import Dashboard from './views/Dashboard.vue'
-import ChatPage from './views/ChatPage.vue'
-import IntelQuery from './views/IntelQuery.vue'
-import Settings from './views/Settings.vue'
+
+const Login = () => import('./views/Login.vue')
+const GlobalLayout = () => import('./layouts/GlobalLayout.vue')
+const Dashboard = () => import('./views/Dashboard.vue')
+const ChatPage = () => import('./views/ChatPage.vue')
+const IntelQuery = () => import('./views/IntelQuery.vue')
+const Settings = () => import('./views/Settings.vue')
 
 const routes = [
   {

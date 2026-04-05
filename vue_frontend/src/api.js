@@ -106,7 +106,53 @@ function isAbortLike(err) {
   if (!err) return false;
   if (err.name === 'AbortError') return true;
   if (err.code === 20) return true;
+  if (String(err.code || '').toUpperCase() === 'ERR_CANCELED') return true;
+  if (String(err.name || '') === 'CanceledError') return true;
   return false;
+}
+
+function normalizeApiError(error, fallbackMessage = '请求失败') {
+  if (!error) {
+    return {
+      message: fallbackMessage,
+      status: null,
+      code: 'UNKNOWN',
+      isCanceled: false,
+      original: error,
+    };
+  }
+
+  const responseData = error.response?.data;
+  const normalizedMessage = toReadableErrorMessage(responseData, error.message || fallbackMessage);
+  return {
+    message: normalizedMessage,
+    status: Number(error.response?.status || 0) || null,
+    code: error.code || error.response?.status || 'UNKNOWN',
+    isCanceled: isAbortLike(error),
+    original: error,
+  };
+}
+
+function emitApiError(detail) {
+  window.dispatchEvent(new CustomEvent('deepsoc:api-error', { detail }));
+}
+
+async function runSafeRequest(requester, fallbackMessage) {
+  try {
+    const response = await requester();
+    return { ok: true, response };
+  } catch (error) {
+    const normalized = normalizeApiError(error, fallbackMessage);
+    if (!normalized.isCanceled) {
+      emitApiError(normalized);
+      console.error('[API ERROR]', normalized.message, normalized);
+    }
+    return {
+      ok: false,
+      canceled: normalized.isCanceled,
+      error: normalized,
+    };
+  }
 }
 
 function sleep(ms) {
@@ -399,22 +445,46 @@ export default {
     return axiosApi.get('/dashboard/stats');
   },
 
-  queryLogs(params = {}) {
-    return axiosApi.get('/query/logs', { params });
+  queryLogs(params = {}, requestConfig = {}) {
+    return axiosApi.get('/query/logs', {
+      params,
+      ...requestConfig,
+    });
   },
 
-  getQueryLogDetail(recordId) {
-    return axiosApi.get(`/query/logs/${encodeURIComponent(recordId)}`);
+  queryLogsSafe(params = {}, requestConfig = {}) {
+    return runSafeRequest(
+      () => axiosApi.get('/query/logs', {
+        params,
+        ...requestConfig,
+      }),
+      '情报查询失败'
+    );
   },
 
-  getQueryFacets(params = {}) {
-    return axiosApi.get('/query/facets', { params });
+  getQueryLogDetail(recordId, requestConfig = {}) {
+    return axiosApi.get(`/query/logs/${encodeURIComponent(recordId)}`, requestConfig);
   },
 
-  async exportQueryLogs(params = {}) {
+  getQueryLogDetailSafe(recordId, requestConfig = {}) {
+    return runSafeRequest(
+      () => axiosApi.get(`/query/logs/${encodeURIComponent(recordId)}`, requestConfig),
+      '详情查询失败'
+    );
+  },
+
+  getQueryFacets(params = {}, requestConfig = {}) {
+    return axiosApi.get('/query/facets', {
+      params,
+      ...requestConfig,
+    });
+  },
+
+  async exportQueryLogs(params = {}, requestConfig = {}) {
     const response = await axiosApi.get('/query/export', {
       params,
       responseType: 'blob',
+      ...requestConfig,
     });
 
     const disposition = response.headers?.['content-disposition'] || '';

@@ -379,7 +379,7 @@ onBeforeUnmount(() => {
 
 .filter-label {
   color: rgba(198, 230, 243, 0.92);
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -395,7 +395,7 @@ onBeforeUnmount(() => {
   border: 1px solid rgba(0, 229, 255, 0.4);
   background: linear-gradient(125deg, rgba(202, 231, 255, 0.1), rgba(14, 39, 73, 0.56));
   color: rgba(214, 240, 252, 0.95);
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.06em;
@@ -509,7 +509,7 @@ onBeforeUnmount(() => {
   background: linear-gradient(135deg, rgba(25, 46, 74, 0.9), rgba(12, 24, 43, 0.9));
   color: #d8f5ff;
   padding: 0 10px;
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.74rem;
   letter-spacing: 0.04em;
   outline: none;
@@ -533,7 +533,7 @@ onBeforeUnmount(() => {
   border: 1px solid rgba(0, 255, 255, 0.46);
   background: linear-gradient(130deg, rgba(20, 64, 88, 0.86), rgba(5, 28, 58, 0.84));
   color: #e0f4ff;
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.7rem;
   font-weight: 600;
   letter-spacing: 0.1em;
@@ -616,7 +616,7 @@ onBeforeUnmount(() => {
 .tooltip-title {
   font-weight: 700;
   color: #00e5ff;
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.68rem;
   letter-spacing: 0.05em;
 }
@@ -628,14 +628,14 @@ onBeforeUnmount(() => {
   background: rgba(0, 255, 157, 0.08);
   color: #b8ffe4;
   font-size: 0.48rem;
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   letter-spacing: 0.08em;
 }
 
 .tooltip-type,
 .tooltip-metric,
 .tooltip-meta {
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.56rem;
 }
 
@@ -697,7 +697,7 @@ onBeforeUnmount(() => {
   border: 1px solid rgba(0, 229, 255, 0.22);
   background: linear-gradient(132deg, rgba(197, 233, 255, 0.11), rgba(6, 24, 48, 0.74));
   color: #97d7ec;
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.5rem;
   letter-spacing: 0.08em;
   box-shadow: inset 0 0 0 1px rgba(160, 228, 255, 0.04);
@@ -747,7 +747,7 @@ onBeforeUnmount(() => {
 
 .legend-title {
   color: #b4efff;
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.54rem;
   letter-spacing: 0.1em;
   margin-bottom: 6px;
@@ -779,14 +779,14 @@ onBeforeUnmount(() => {
 
 .legend-label {
   color: #d4f6ff;
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.56rem;
   letter-spacing: 0.05em;
 }
 
 .legend-note {
   color: #7fa8b6;
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.5rem;
   text-align: right;
 }
@@ -794,7 +794,7 @@ onBeforeUnmount(() => {
 .legend-range {
   margin-top: 2px;
   color: #9ddbf1;
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.52rem;
   letter-spacing: 0.05em;
 }
@@ -815,7 +815,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 5px;
   margin-top: 3px;
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.54rem;
   letter-spacing: 0.07em;
   font-weight: 700;

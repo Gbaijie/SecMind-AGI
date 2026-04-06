@@ -197,7 +197,9 @@
         </NScrollbar>
       </template>
 
-      <NEmpty v-else description="请选择一条记录查看详情" />
+      <div v-else class="detail-empty-wrapper">
+        <NEmpty description="请选择一条记录查看详情" />
+      </div>
     </NSpin>
   </FuiCard>
 
@@ -544,7 +546,7 @@ defineEmits(['toggle-immersive', 'close-immersive', 'send-to-chat', 'copy-field'
 
 .detail-section-title {
   color: var(--neon-cyan);
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 1rem;
   letter-spacing: 0.1em;
   margin-bottom: 0.5rem;
@@ -588,7 +590,7 @@ defineEmits(['toggle-immersive', 'close-immersive', 'send-to-chat', 'copy-field'
   line-height: 1.55;
   white-space: pre-wrap;
   word-break: break-word;
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   color: #d6efff;
 }
 
@@ -607,7 +609,7 @@ defineEmits(['toggle-immersive', 'close-immersive', 'send-to-chat', 'copy-field'
 }
 
 .detail-item--copyable strong {
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   letter-spacing: 0.02em;
 }
 
@@ -733,14 +735,14 @@ defineEmits(['toggle-immersive', 'close-immersive', 'send-to-chat', 'copy-field'
 
 .intel-reader-toolbar__label {
   color: #5c7a8f;
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.62rem;
   letter-spacing: 0.16em;
 }
 
 .intel-reader-toolbar__value {
   color: #e6f5ff;
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.76rem;
   font-weight: 600;
   white-space: nowrap;
@@ -944,4 +946,49 @@ defineEmits(['toggle-immersive', 'close-immersive', 'send-to-chat', 'copy-field'
     opacity: 1;
   }
 }
+
+.detail-empty-wrapper {
+  height: 100%;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.detail-empty-wrapper :deep(.n-empty) {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.detail-empty-wrapper :deep(.n-empty__icon) {
+  font-size: 160px; 
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.75;
+  transition: transform 0.3s ease;
+  margin-bottom: 50px; 
+}
+
+.detail-empty-wrapper :deep(.n-empty__icon svg) {
+  width: 120px !important;
+  height: 120px !important;
+}
+
+.detail-empty-wrapper:hover :deep(.n-empty__icon) {
+  transform: scale(1.05);
+}
+
+.detail-empty-wrapper :deep(.n-empty__description) {
+  font-size: 1.25rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  margin-top: 1.2rem;
+  color: #a8c8e0;
+  text-align: center;     
+}
+
 </style>

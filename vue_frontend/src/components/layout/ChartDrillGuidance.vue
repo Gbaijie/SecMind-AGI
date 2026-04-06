@@ -79,7 +79,7 @@ const emit = defineEmits(['dismiss'])
   background: linear-gradient(180deg, rgba(7, 15, 30, 0.96), rgba(4, 10, 22, 0.9));
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35), inset 0 0 0 1px rgba(0, 229, 255, 0.08);
   color: #d9f6ff;
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 1rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -128,7 +128,7 @@ const emit = defineEmits(['dismiss'])
 
 .chart-drill-intro__text {
   color: #b7dceb;
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.72rem;
   line-height: 1.7;
   letter-spacing: 0.06em;
@@ -140,7 +140,7 @@ const emit = defineEmits(['dismiss'])
   border: 1px solid rgba(0, 229, 255, 0.34);
   background: rgba(0, 229, 255, 0.08);
   color: #d9f6ff;
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.68rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;

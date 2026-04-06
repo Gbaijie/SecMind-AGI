@@ -63,12 +63,12 @@ const createCanvasTextSprite = (text, colorHex, options = {}) => {
     const padX = options.paddingX || 22
     const padY = options.paddingY || 13
     const renderScale = options.renderScale || 2
-    ctx.font = `700 ${fontSize}px "Roboto Mono", monospace`
+    ctx.font = `700 ${fontSize}px "HarmonyOS Sans SC", "HarmonyOS Sans", "PingFang SC", "Microsoft YaHei", sans-serif`
     const w = Math.max(120, Math.ceil(ctx.measureText(value).width) + padX * 2)
     const h = fontSize + padY * 2
     canvas.width = Math.ceil(w * renderScale); canvas.height = Math.ceil(h * renderScale)
     ctx.scale(renderScale, renderScale)
-    ctx.font = `700 ${fontSize}px "Roboto Mono", monospace`
+    ctx.font = `700 ${fontSize}px "HarmonyOS Sans SC", "HarmonyOS Sans", "PingFang SC", "Microsoft YaHei", sans-serif`
     ctx.textBaseline = 'middle'
     ctx.fillStyle = 'rgba(5,8,20,0.72)'; ctx.fillRect(0, 0, w, h)
     ctx.strokeStyle = 'rgba(0,229,255,0.3)'; ctx.lineWidth = 2

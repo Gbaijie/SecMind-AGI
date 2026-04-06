@@ -368,7 +368,7 @@ defineExpose({
 }
 
 .edit-hint-text {
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.62rem;
   letter-spacing: 0.06em;
   color: #8fd0e8;
@@ -426,7 +426,7 @@ defineExpose({
   gap: 0.28rem;
   padding: 0.22rem 0.5rem;
   border: 1px solid var(--border-dim);
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.62rem;
   letter-spacing: 0.08em;
   color: var(--text-muted);
@@ -449,7 +449,7 @@ defineExpose({
 }
 
 .multi-agent-provider {
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.58rem;
   color: #7ba7bc;
   letter-spacing: 0.08em;
@@ -478,7 +478,7 @@ defineExpose({
 .chip-close {
   min-width: 0;
   height: auto;
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.75rem;
   padding: 0;
   color: inherit;
@@ -507,7 +507,7 @@ defineExpose({
 }
 
 .multi-agent-config :deep(.n-form-item-label__text) {
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.56rem;
   letter-spacing: 0.08em;
   color: var(--text-secondary);
@@ -519,7 +519,7 @@ defineExpose({
 }
 
 .multi-agent-config__title {
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.58rem;
   letter-spacing: 0.14em;
   color: var(--neon-cyan);
@@ -541,7 +541,7 @@ defineExpose({
 }
 
 .prompt-label {
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.8rem;
   color: var(--neon-cyan);
   letter-spacing: 0.04em;
@@ -563,7 +563,7 @@ defineExpose({
   border: none;
   background: transparent;
   color: var(--text-primary);
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.9rem;
   line-height: 1.55;
   resize: none;

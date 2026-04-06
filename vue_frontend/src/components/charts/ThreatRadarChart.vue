@@ -151,7 +151,7 @@ const { chartRef } = useEcharts(buildOption, () => props.stats, {
   justify-content: center;
   background: rgba(5, 8, 20, 0.4);
   color: #7ba7bc;
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.64rem;
   letter-spacing: 0.14em;
   text-transform: uppercase;

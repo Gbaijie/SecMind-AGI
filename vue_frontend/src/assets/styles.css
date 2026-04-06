@@ -48,9 +48,9 @@
 
   /* ── 字体 ────────────────────────────────────────── */
   --font-ui: 'HarmonyOS Sans SC', 'HarmonyOS Sans', 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', sans-serif;
-  --font-brand: 'Orbitron', sans-serif;
+  --font-brand: 'HarmonyOS Sans SC', 'HarmonyOS Sans', 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', sans-serif;
   --font-mono: 'Roboto Mono', 'Consolas', 'HarmonyOS Sans SC', 'HarmonyOS Sans', 'PingFang SC', 'Microsoft YaHei', monospace;
-  --font-display: 'Orbitron', 'Roboto Mono', 'Consolas', monospace;
+  --font-display: 'HarmonyOS Sans SC', 'HarmonyOS Sans', 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', sans-serif;
 
   /* ── 可读性与可访问性 ─────────────────────────── */
   --hud-label-color: #d7dee7;
@@ -233,7 +233,7 @@ textarea {
   background: rgba(0, 0, 0, 0.45);
   border: 1px solid var(--border-dim);
   color: var(--text-primary);
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.9rem;
   padding: 0.625rem 0.875rem;
   width: 100%;
@@ -258,7 +258,7 @@ textarea:focus {
 }
 
 textarea {
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   resize: vertical;
 }
 
@@ -288,7 +288,7 @@ textarea {
   margin-bottom: 1rem;
   font-size: 0.875rem;
   font-weight: 500;
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
 }
 
 /* ----------------------------------------------------------
@@ -314,7 +314,7 @@ textarea {
  * 9. Markdown 渲染（AI 终端输出）
  * ---------------------------------------------------------- */
 .message:not(.user-message) .message-text {
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   line-height: 1.75;
   font-size: 0.9rem;
   color: var(--neon-green);

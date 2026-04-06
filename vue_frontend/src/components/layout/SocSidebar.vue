@@ -242,7 +242,7 @@ const confirmRename = () => {
 }
 
 .session-create-bar__text {
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.7rem;
   letter-spacing: 0.06em;
   color: #92b9cc;
@@ -279,7 +279,7 @@ const confirmRename = () => {
 }
 
 .session-search-input :deep(.n-input__input-el) {
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.7rem;
   letter-spacing: 0.06em;
   color: var(--text-main);
@@ -354,7 +354,7 @@ const confirmRename = () => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.85rem;
   letter-spacing: 0.05em;
   color: #c8e6f6;
@@ -429,7 +429,7 @@ const confirmRename = () => {
   display: grid;
   place-items: center;
   color: #6f95a9;
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.64rem;
   letter-spacing: 0.1em;
 }
@@ -446,7 +446,7 @@ const confirmRename = () => {
   border: 1px solid rgba(0, 229, 255, 0.24);
   background: rgba(0, 229, 255, 0.06);
   color: var(--neon-cyan);
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.62rem;
   letter-spacing: 0.1em;
   display: inline-flex;

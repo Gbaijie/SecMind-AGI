@@ -193,7 +193,7 @@ const handleSiderLeave = () => {
 }
 
 .sider-menu :deep(.n-menu-item-content__title) {
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.66rem;
   letter-spacing: 0.08em;
 }

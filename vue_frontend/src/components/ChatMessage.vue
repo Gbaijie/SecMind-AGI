@@ -400,7 +400,7 @@ const formatTime = (date) => {
   margin-bottom: 0.65rem;
   padding-bottom: 0.45rem;
   border-bottom: 1px dashed rgba(0, 229, 255, 0.15); 
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   letter-spacing: 0.06em;
 }
 
@@ -486,7 +486,7 @@ const formatTime = (date) => {
   border-bottom: 1px solid rgba(0, 229, 255, 0.18);
   background: rgba(2, 8, 22, 0.55);
   color: var(--neon-cyan);
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.62rem;
   letter-spacing: 0.08em;
   padding: 0.4rem 0.52rem;
@@ -520,14 +520,14 @@ const formatTime = (date) => {
 }
 
 .agent-node__name {
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.8rem;
   letter-spacing: 0.09em;
   color: var(--text-secondary);
 }
 
 .agent-node__status {
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.56rem;
   letter-spacing: 0.08em;
 }
@@ -553,7 +553,7 @@ const formatTime = (date) => {
   padding: 1rem 1.5rem;
   max-height: 400px;
   overflow: auto;
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 1rem;
   line-height: 1.55;
   color: #8fe8ff;
@@ -569,7 +569,7 @@ const formatTime = (date) => {
   margin: 0;
   border-top: 1px solid rgba(255, 107, 147, 0.35);
   padding: 0.35rem 0.42rem 0.45rem;
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.62rem;
   line-height: 1.4;
   color: #ff9bb7;
@@ -579,7 +579,7 @@ const formatTime = (date) => {
 
 .terminal-text {
   margin: 0;
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 1rem;
   line-height: 1.8;
   color: #e5b8b8; /* 柔和的灰青色替代高亮青色 */
@@ -600,7 +600,7 @@ const formatTime = (date) => {
   display: inline-block;
   margin-left: 0.3rem;
   color: var(--neon-cyan);
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   animation: blink 0.8s step-end infinite;
 }
 
@@ -629,7 +629,7 @@ const formatTime = (date) => {
   border: 1px solid rgba(0, 229, 255, 0.15); /* 降低边框初始对比度 */
   background: rgba(0, 0, 0, 0.2);
   color: #7ba7bc; /* 降低文字初始对比度 */
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.62rem;
   line-height: 1.2;
   letter-spacing: 0.08em;
@@ -655,7 +655,7 @@ const formatTime = (date) => {
 }
 
 :deep(.markdown-body) {
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 1rem;
   line-height: 1.8;
   color: var(--neon-cyan);

@@ -430,7 +430,7 @@ onUnmounted(() => {
 .terminal-header-right {
   margin-left: auto;
   gap: 0.75rem;
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
 }
 
 .terminal-meta {
@@ -536,7 +536,7 @@ onUnmounted(() => {
 .analysis-jump-card__prompt-label,
 .analysis-jump-card__followups-label,
 .analysis-history-strip__label {
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.62rem;
   letter-spacing: 0.08em;
   color: #6f95a9;
@@ -572,7 +572,7 @@ onUnmounted(() => {
 
 .analysis-jump-card__summary-value {
   color: #d9f6ff;
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.66rem;
   line-height: 1.55;
   word-break: break-word;
@@ -589,7 +589,7 @@ onUnmounted(() => {
 .analysis-jump-card__prompt-text {
   margin-top: 0.34rem;
   color: #d8f5ff;
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.67rem;
   line-height: 1.65;
   white-space: pre-wrap;
@@ -611,7 +611,7 @@ onUnmounted(() => {
   border: 1px solid rgba(0, 229, 255, 0.16);
   background: rgba(0, 229, 255, 0.05);
   color: #b9dced;
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.62rem;
   letter-spacing: 0.05em;
 }
@@ -678,7 +678,7 @@ onUnmounted(() => {
 }
 
 .terminal-alert :deep(.n-alert-body__content) {
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.66rem;
 }
 
@@ -755,7 +755,7 @@ onUnmounted(() => {
   align-items: center;
   gap: 0.45rem;
   color: var(--neon-cyan);
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.66rem;
   padding: 0 0.4rem;
 }
@@ -782,7 +782,7 @@ onUnmounted(() => {
 }
 
 .terminal-entry-hint {
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.66rem;
   letter-spacing: 0.08em;
 }

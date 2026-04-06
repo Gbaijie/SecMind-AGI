@@ -231,7 +231,7 @@ const modelOptions = computed(() => (availableModels.value || []).map((item) => 
 }
 
 .settings-form :deep(.n-form-item-label__text) {
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.8rem;
   letter-spacing: 0.11em;
   color: #89a8ba;
@@ -248,7 +248,7 @@ const modelOptions = computed(() => (availableModels.value || []).map((item) => 
   margin-left: 1rem;
   font-size: 0.8rem;
   color: #7ca4b8;
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   letter-spacing: 0.04em;
 }
 

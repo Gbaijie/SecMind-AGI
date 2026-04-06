@@ -77,7 +77,7 @@ defineProps({
 }
 
 .brand-sub {
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.8rem;
   color: #a0efef;
   letter-spacing: 0.08em;
@@ -103,7 +103,7 @@ defineProps({
 }
 
 .hud-label {
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: var(--hud-label-size, 14px);
   letter-spacing: 0.11em;
   text-transform: uppercase;

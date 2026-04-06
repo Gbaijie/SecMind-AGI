@@ -76,7 +76,7 @@ defineEmits(['page-change', 'page-size-change'])
 
 .intel-pagination-meta {
   color: #7ba7bc;
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.72rem;
 }
 

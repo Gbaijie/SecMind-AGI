@@ -6,7 +6,7 @@
           <div class="intel-filter-shell__title">基础搜索</div>
         </div>
         <NButton quaternary size="small" class="intel-filter-toggle" @click="$emit('toggle-advanced')">
-          {{ showAdvancedFilters ? '收起高级筛选' : '展开高级筛选' }}
+          {{ showAdvancedFilters ? '收起高级筛选' : '高级筛选' }}
         </NButton>
       </div>
 
@@ -186,7 +186,7 @@ const sortOrderModel = computed({
 
 .intel-filter-shell__title {
   color: var(--neon-cyan);
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 1.25rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -289,4 +289,5 @@ const sortOrderModel = computed({
     max-height: 420px;
   }
 }
+
 </style>

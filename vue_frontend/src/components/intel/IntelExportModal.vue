@@ -105,7 +105,8 @@ defineEmits(['close', 'select-default', 'select-all', 'submit'])
 
 .export-center-panel :deep(.n-card-header) {
   overflow: visible;
-  padding: 0.85rem 0.95rem 0.55rem;
+  padding: 1rem 1.7rem 1rem;
+  font-size: 1.5rem;
 }
 
 .export-center-panel :deep(.n-card-header__main),
@@ -157,13 +158,18 @@ defineEmits(['close', 'select-default', 'select-all', 'submit'])
 .export-option-title {
   margin-bottom: 0.45rem;
   color: var(--neon-cyan);
-  font-family: var(--font-mono);
-  font-size: 0.68rem;
+  font-family: var(--font-ui);
+  font-size: 1rem;
   letter-spacing: 0.1em;
+  padding-left: 0.3rem;
 }
 
 .export-option-group--switch .export-option-title {
   margin-bottom: 0;
+}
+
+.export-option-group > :not(.export-option-title):not(.export-option-title-row) {
+  padding-left: 0.6rem; 
 }
 
 .export-field-actions {
@@ -175,12 +181,18 @@ defineEmits(['close', 'select-default', 'select-all', 'submit'])
 
 .export-ghost-btn {
   line-height: 1.35;
+  font-size: 1rem;
 }
 
 .export-fields-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.35rem 0.75rem;
+  padding: 0 0.5rem;
+  gap: 0.5rem 8rem;
+}
+
+.export-fields-grid :deep(.n-checkbox__label) {
+  font-size: 0.9rem;
 }
 
 .export-panel-footer {
@@ -195,7 +207,8 @@ defineEmits(['close', 'select-default', 'select-all', 'submit'])
 
 .export-selected-tip {
   color: #7ba7bc;
-  font-size: 0.72rem;
+  padding-left: 0.6rem;
+  font-size: 1rem;
 }
 
 .export-footer-actions {

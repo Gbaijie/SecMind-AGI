@@ -669,7 +669,7 @@ const handleFullscreenModalChange = (show) => {
   border: 1px solid rgba(0, 229, 255, 0.22);
   background: rgba(0, 229, 255, 0.08);
   color: #97d7ec;
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.57rem;
   letter-spacing: 0.08em;
   padding: 0.12rem 0.35rem;
@@ -692,7 +692,7 @@ const handleFullscreenModalChange = (show) => {
   border: 1px dashed rgba(0, 229, 255, 0.35);
   background: rgba(0, 229, 255, 0.05);
   color: #8fd0e8;
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.6rem;
   letter-spacing: 0.12em;
   display: inline-flex;

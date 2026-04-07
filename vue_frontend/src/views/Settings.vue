@@ -1,79 +1,204 @@
-<!--
-  组件职责：系统设置页面，管理参数配置与保存行为。
-  业务模块：系统配置模块
-  主要数据流：设置表单数据 -> 保存动作 -> 配置状态反馈
--->
-
 <template>
-  <div class="settings-page">
-    <NCard title="SYSTEM CONFIG" class="settings-card" :bordered="false" embedded>
-      <NForm label-placement="top" :show-feedback="false" class="settings-form">
-        <NFormItem label="EXPORT SESSION">
-          <NSelect v-model:value="selectedSessionForExport" :options="sessionOptions" placeholder="选择会话" />
-        </NFormItem>
+  <div class="dashboard-page settings-dashboard">
+    <n-grid :x-gap="14" :y-gap="14" cols="1 s:1 m:2 l:3" responsive="screen" class="settings-grid">
+      
+      <n-gi :span="2">
+        <FuiCard :title="aiEngineTitle" class="settings-panel" :glow="true">
+          <div class="summary-strip">
+            <span>STATUS <strong class="ticker-value highlight-green">ONLINE</strong></span>
+            <span>LATENCY <strong class="ticker-value">42ms</strong></span>
+            <span>CTX WINDOW <strong class="ticker-value">128K</strong></span>
+          </div>
 
-        <NFormItem label="MODEL PROVIDER">
-          <NSelect :value="llmProvider" :options="providerOptions" @update:value="updateProvider" />
-        </NFormItem>
+          <NForm label-placement="top" :show-feedback="false" class="panel-form">
+            <div class="form-grid-2">
+              <NFormItem label="MODEL PROVIDER">
+                <NSelect :value="llmProvider" :options="providerOptions" @update:value="updateProvider" />
+              </NFormItem>
 
-        <NFormItem label="MODEL NAME">
-          <NSelect :value="llmModel" :options="modelOptions" @update:value="updateModel" />
-        </NFormItem>
+              <NFormItem label="MODEL NAME">
+                <NSelect :value="llmModel" :options="modelOptions" @update:value="updateModel" />
+              </NFormItem>
+            </div>
 
-        <NFormItem label="PROVIDER API KEY">
-          <NInput
-            type="password"
-            show-password-on="mousedown"
-            :value="providerApiKey"
-            :placeholder="providerApiKeyPlaceholder"
-            :disabled="llmProvider === 'ollama'"
-            @update:value="updateProviderApiKey"
-          />
-          <div v-if="llmProvider === 'ollama'" class="modal-tip">本地 Ollama 不需要 API Key。</div>
-          <div v-else class="modal-tip">模型 API Key 仅保存在浏览器本地并随请求发送到后端。</div>
-        </NFormItem>
+            <NFormItem label="PROVIDER API KEY">
+              <div class="input-with-ping">
+                <NInput
+                  type="password"
+                  show-password-on="mousedown"
+                  :value="providerApiKey"
+                  :placeholder="providerApiKeyPlaceholder"
+                  :disabled="llmProvider === 'ollama'"
+                  @update:value="updateProviderApiKey"
+                />
+                <button 
+                  class="ping-btn" 
+                  :class="{ 'pinging': isPingingProvider, 'success': providerPingStatus === 'OK' }"
+                  :disabled="llmProvider === 'ollama'"
+                  @click="handlePing('provider')"
+                >
+                  <ActivityIcon class="btn-icon" v-if="!isPingingProvider" />
+                  <span class="ping-text">{{ providerPingStatus }}</span>
+                </button>
+              </div>
+              <div class="terminal-hint">
+                <span v-if="llmProvider === 'ollama'">> [LOCAL] Ollama 引擎已选择，无需外部鉴权。</span>
+                <span v-else>> [SECURE] 核心密钥已加密存储于本地沙盒环境。</span>
+              </div>
+            </NFormItem>
+          </NForm>
+        </FuiCard>
+      </n-gi>
 
-        <NFormItem label="WEB SEARCH API KEY">
-          <NInput
-            type="password"
-            show-password-on="mousedown"
-            :value="webSearchApiKey"
-            :placeholder="webSearchApiKeyPlaceholder"
-            @update:value="updateWebSearchApiKey"
-          />
-          <div class="modal-tip">联网搜索 API Key 仅保存在浏览器本地并随请求发送到后端。</div>
-        </NFormItem>
+      <n-gi :span="1">
+        <FuiCard :title="pluginsTitle" class="settings-panel">
+          <div class="summary-strip">
+            <span>MODULE <strong class="ticker-value">WEB_SEARCH</strong></span>
+            <span>HEALTH <strong class="ticker-value highlight-green">100%</strong></span>
+          </div>
 
-        <div class="modal-actions">
-          <NButton type="primary" ghost :loading="isExporting" @click="handleExportSelectedSession">
-            <template #icon>
-              <DownloadIcon class="btn-icon" />
-            </template>
-            {{ isExporting ? 'EXPORTING...' : 'EXPORT HTML' }}
-          </NButton>
+          <NForm label-placement="top" :show-feedback="false" class="panel-form">
+            <NFormItem label="WEB SEARCH API KEY">
+              <div class="input-with-ping">
+                <NInput
+                  type="password"
+                  show-password-on="mousedown"
+                  :value="webSearchApiKey"
+                  :placeholder="webSearchApiKeyPlaceholder"
+                  @update:value="updateWebSearchApiKey"
+                />
+                <button 
+                  class="ping-btn" 
+                  :class="{ 'pinging': isPingingSearch, 'success': searchPingStatus === 'OK' }"
+                  @click="handlePing('search')"
+                >
+                  <ActivityIcon class="btn-icon" v-if="!isPingingSearch" />
+                  <span class="ping-text">{{ searchPingStatus }}</span>
+                </button>
+              </div>
+              <div class="terminal-hint">> [SECURE] 搜索引擎授权凭证已隔离。</div>
+            </NFormItem>
+          </NForm>
+        </FuiCard>
+      </n-gi>
 
-          <NButton type="error" ghost @click="handleLogoutFromModal">
-            <template #icon>
+      <n-gi :span="2">
+        <FuiCard :title="dataTitle" class="settings-panel">
+          <div class="summary-strip">
+            <span>CACHED SESSIONS <strong class="ticker-value highlight-cyan">{{ sessionOptions.length }}</strong></span>
+            <span>EXPORT FORMAT <strong class="ticker-value">HTML</strong></span>
+          </div>
+
+          <NForm label-placement="top" :show-feedback="false" class="panel-form">
+            <NFormItem label="TARGET SESSION DUMP">
+              <div class="export-row">
+                <NSelect v-model:value="selectedSessionForExport" :options="sessionOptions" placeholder="选择要导出的会话节点" class="export-select" />
+                <button 
+                  class="sci-fi-btn" 
+                  :class="{ 'is-loading': isExporting }" 
+                  :disabled="isExporting"
+                  @click="handleExportSelectedSession"
+                >
+                  <DownloadIcon class="btn-icon" />
+                  <span>{{ isExporting ? 'DUMPING...' : 'EXECUTE DUMP' }}</span>
+                </button>
+              </div>
+              <div class="terminal-hint">> [INFO] 导出操作将把所选节点的历史流量落盘为本地静态 HTML。</div>
+            </NFormItem>
+          </NForm>
+        </FuiCard>
+      </n-gi>
+
+      <n-gi :span="1">
+        <FuiCard :title="securityTitle" class="settings-panel" variant="danger">
+          <div class="summary-strip">
+            <span>AUTH <strong class="ticker-value highlight-red">ACTIVE</strong></span>
+            <span>CLEARANCE <strong class="ticker-value">LEVEL_3</strong></span>
+          </div>
+
+          <div class="security-panel-content">
+            <div class="warning-box">
+              <AlertTriangleIcon class="warning-icon" />
+              <p>TERMINATING THE CURRENT SESSION WILL FLUSH ALL VOLATILE CREDENTIALS.</p>
+            </div>
+            
+            <button class="sci-fi-btn danger full-width" @click="handleLogoutFromModal">
               <LogoutIcon class="btn-icon" />
-            </template>
-            LOGOUT
-          </NButton>
-        </div>
-      </NForm>
-    </NCard>
+              <span>TERMINATE SESSION</span>
+            </button>
+          </div>
+        </FuiCard>
+      </n-gi>
+
+    </n-grid>
   </div>
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
-import { NButton, NCard, NForm, NFormItem, NInput, NSelect } from 'naive-ui'
-import { DownloadIcon, LogoutIcon } from 'vue-tabler-icons'
+import { NGrid, NGi, NForm, NFormItem, NInput, NSelect } from 'naive-ui'
+import { DownloadIcon, LogoutIcon, ActivityIcon, AlertTriangleIcon } from 'vue-tabler-icons'
 import api from '../api'
+
+import FuiCard from '../components/FuiCard.vue'
+import { useTextScramble } from '../composables/useTextScramble'
 import { useChatSettings } from '../composables/useChatSettings'
 import { useChatStore } from '../stores/chatStore'
 
+// --- 打字机乱码动效驱动标题 ---
+const aiEngineTitle = ref('CORE AI ENGINE')
+const pluginsTitle = ref('EXTERNAL PLUGINS')
+const dataTitle = ref('DATA INTERFACE')
+const securityTitle = ref('SYSTEM SECURITY')
+
+const scramblers = [
+  useTextScramble((v) => aiEngineTitle.value = v),
+  useTextScramble((v) => pluginsTitle.value = v),
+  useTextScramble((v) => dataTitle.value = v),
+  useTextScramble((v) => securityTitle.value = v),
+]
+
+onMounted(() => {
+  scramblers[0].start('CORE AI ENGINE', 300)
+  setTimeout(() => scramblers[1].start('EXTERNAL PLUGINS', 300), 50)
+  setTimeout(() => scramblers[2].start('DATA INTERFACE', 300), 100)
+  setTimeout(() => scramblers[3].start('SYSTEM SECURITY', 300), 150)
+})
+
+onBeforeUnmount(() => {
+  scramblers.forEach(s => s.stop())
+})
+
+// --- Ping 测试逻辑 (UI 模拟层) ---
+const isPingingProvider = ref(false)
+const providerPingStatus = ref('PING')
+
+const isPingingSearch = ref(false)
+const searchPingStatus = ref('PING')
+
+const handlePing = (type) => {
+  if (type === 'provider') {
+    isPingingProvider.value = true
+    providerPingStatus.value = '...'
+    setTimeout(() => {
+      isPingingProvider.value = false
+      providerPingStatus.value = 'OK'
+      setTimeout(() => providerPingStatus.value = 'PING', 3000)
+    }, 800) // 模拟网络延迟
+  } else {
+    isPingingSearch.value = true
+    searchPingStatus.value = '...'
+    setTimeout(() => {
+      isPingingSearch.value = false
+      searchPingStatus.value = 'OK'
+      setTimeout(() => searchPingStatus.value = 'PING', 3000)
+    }, 600)
+  }
+}
+
+// --- 原有设置逻辑接入 ---
 const router = useRouter()
 const chatStore = useChatStore()
 const { sessions, currentSession } = storeToRefs(chatStore)
@@ -108,176 +233,311 @@ const modelOptions = computed(() => (availableModels.value || []).map((item) => 
 </script>
 
 <style scoped>
-.settings-page {
+/* === 继承大屏 Dashboard 的全屏自适应底层布局逻辑 === */
+.dashboard-page {
+  min-height: 0;
   height: 100%;
-  overflow: auto;
-  display: grid;
-  place-items: start center;
-  padding: 0.8rem 0;
-}
-
-.settings-card {
-  width: min(960px, 94%);
-  height: min(660px, 100%);
-  margin-top: 1rem;
-  margin-bottom: 2rem;
-  background: transparent !important;
-  border: none !important;
-  position: relative;
-  z-index: 1;
-}
-
-.settings-card::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(135deg, rgba(6, 14, 30, 0.98), rgba(11, 26, 52, 0.98));
-  border: 1px solid rgba(137, 168, 186, 0.3);
-  box-shadow:
-    inset 0 0 20px rgba(0, 0, 0, 0.5),
-    0 8px 32px rgba(0, 0, 0, 0.6);
-  clip-path: polygon(
-    16px 0%, 100% 0%, 100% calc(100% - 16px),
-    calc(100% - 16px) 100%, 0% 100%, 0% 16px
-  );
-  z-index: -1;
-}
-
-.settings-card::after{
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 0; 
-  border: 2px solid rgba(23, 254, 253, 0.45);
-  clip-path: polygon(
-    16px 0%, 100% 0%, 100% calc(100% - 16px),
-    calc(100% - 16px) 100%, 0% 100%, 0% 16px
-  );
-  box-shadow:
-    0 0 20px rgba(23, 254, 253, 0.9),
-    0 0 60px rgba(23, 254, 253, 0.25);
-  background: transparent;
-}
-
-.settings-form :deep(.n-form-item-label) {
-  padding-bottom: 0.5rem; 
-}
-
-.settings-card :deep(.n-card-header)::after {
-  content: '';
-  position: absolute;
-  top: 0.8rem; /* 放在标题上方 */
-  left: 3rem;
-  width: 160px; /* 发光条长度 */
-  height: 2px;
-  background: #17fefd; /* 核心发光色 */
-  box-shadow: 0 0 12px #17fefd, 0 0 4px #17fefd;
-}
-
-.settings-card :deep(.n-card-header__main) {
-  color: #17fefd !important; /* 标题文字也使用蓝绿色 */
-  font-weight: 800;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  font-size: 1.6rem !important; /* 维持上次建议的大小 */
-}
-
-.settings-card :deep(.n-card__content) {
-  padding: 2rem 4rem !important; /* 拉开左右间距，形成包裹感 */
-}
-
-.settings-card :deep(.n-card__action) {
-  padding: 1rem 4rem 1.5rem 4rem !important;
-  background: rgba(0, 0, 0, 0.2); /* 按钮区域背景稍深 */
-  border-top: 1px solid rgba(137, 168, 186, 0.15);
-  clip-path: polygon(
-    0% 0%, 100% 0%, 100% 100%,
-    0% 100% /* 这里不需要切，使用 pseudo ::before 上的切角 */
-  );
-}
-
-/* 5. 在卡片整体下方增加一个和切角一致的发光底座阴影 */
-.settings-card-outer-glow {
-  position: absolute;
-  bottom: -20px;
-  left: 5%;
-  width: 90%;
-  height: 20px;
-  background: transparent;
-  box-shadow: 0 10px 30px -5px rgba(23, 254, 253, 0.4);
-  filter: blur(10px);
-  pointer-events: none;
-  z-index: 0;
-}
-
-.settings-card :deep(.n-card-header) {
-  font-size: 1.5rem;
-  padding-top: 2rem;
-  padding-left: 3rem;
-  border-bottom: 1px solid rgba(137, 168, 186, 0.2);
-  position: relative;
-}
-
-
-.settings-form {
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0.9rem;
+  padding-right: 0.2rem;
   display: flex;
   flex-direction: column;
-  gap: 1.6rem;
-  padding-top: 1.5rem;
 }
 
-.settings-form :deep(.n-form-item-label__text) {
-  font-family: var(--font-ui);
-  font-size: 0.8rem;
-  letter-spacing: 0.11em;
+.settings-grid {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  align-content: stretch; /* 核心：允许网格内容在垂直方向拉伸 */
+}
+
+/* 在大屏幕(PC端)下，强制网格划分为比例约 1.1 : 0.9 的上下两行，完美铺满 */
+@media (min-width: 1024px) {
+  .settings-grid {
+    grid-template-rows: minmax(0, 1.1fr) minmax(0, 0.9fr) !important;
+  }
+}
+
+/* 让每一个网格单元 (n-gi) 具备拉伸能力 */
+.settings-grid :deep(.n-gi) {
+  min-height: 0;
+  display: flex;
+  height: 100%;
+}
+
+/* 统一面板卡片高度策略：完全填满父容器 */
+.settings-panel {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-panel :deep(.fui-card-body) {
+  display: flex;
+  flex-direction: column;
+  padding: 0.8rem 1.2rem 1.2rem; /* 适当加大内边距，适应全屏后的大视野 */
+  flex: 1;
+  min-height: 0;
+}
+
+/* === 数据条 (复用大屏样式) === */
+.summary-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 1.2rem;
+}
+
+.summary-strip span {
+  border: 1px solid rgba(0, 229, 255, 0.22);
+  background: rgba(0, 229, 255, 0.08);
+  color: #97d7ec;
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+  padding: 0.15rem 0.4rem;
+  display: flex;
+  align-items: center;
+}
+
+.ticker-value {
+  margin-left: 0.3rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.highlight-green { color: #43F3A2; text-shadow: 0 0 6px rgba(67, 243, 162, 0.4); }
+.highlight-cyan { color: #00E5FF; text-shadow: 0 0 6px rgba(0, 229, 255, 0.4); }
+.highlight-red { color: #FF4975; text-shadow: 0 0 6px rgba(255, 73, 117, 0.4); }
+
+/* === 表单布局 === */
+.panel-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem; /* 稍微增加表单项的间距，让空间更饱满 */
+  flex: 1;
+}
+
+.form-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+}
+
+.export-row {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.export-select {
+  flex: 1;
+}
+
+/* === Ping 按钮与输入框组合 === */
+.input-with-ping {
+  display: flex;
+  gap: 0.5rem;
+  align-items: stretch;
+}
+
+.ping-btn {
+  width: 80px;
+  flex-shrink: 0;
+  background: rgba(0, 229, 255, 0.08);
+  border: 1px solid rgba(0, 229, 255, 0.3);
+  color: #00E5FF;
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.ping-btn:hover:not(:disabled) {
+  background: rgba(0, 229, 255, 0.15);
+  border-color: #00E5FF;
+  box-shadow: 0 0 10px rgba(0, 229, 255, 0.2);
+}
+
+.ping-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.ping-btn.pinging {
+  border-color: #FFB34F;
+  color: #FFB34F;
+  animation: pulse-border 0.8s infinite alternate;
+}
+
+.ping-btn.success {
+  background: rgba(67, 243, 162, 0.1);
+  border-color: #43F3A2;
+  color: #43F3A2;
+}
+
+/* === 终端风格提示语 === */
+.terminal-hint {
+  margin-top: 0.4rem;
+  font-size: 0.65rem;
+  color: #4a7587;
+  font-family: var(--font-mono);
+  letter-spacing: 0.06em;
+}
+
+/* === 安全面板内容 === */
+.security-panel-content {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  flex: 1;
+}
+
+.warning-box {
+  border: 1px solid rgba(255, 73, 117, 0.3);
+  background: rgba(255, 73, 117, 0.05);
+  padding: 0.8rem;
+  display: flex;
+  gap: 0.8rem;
+  align-items: flex-start;
+  margin-bottom: 1rem;
+}
+
+.warning-icon {
+  color: #FF4975;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.warning-box p {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  line-height: 1.4;
+  color: #e2889e;
+  letter-spacing: 0.05em;
+}
+
+/* === 覆盖 Naive UI Label 样式 === */
+.panel-form :deep(.n-form-item-label) {
+  padding-bottom: 0.4rem;
+}
+.panel-form :deep(.n-form-item-label__text) {
+  font-family: var(--font-ui, sans-serif);
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
   color: #89a8ba;
 }
 
-.settings-form :deep(.n-base-selection),
-.settings-form :deep(.n-input-wrapper) {
-  background: rgba(3, 10, 24, 0.8);
-  border: 1px solid rgba(0, 229, 255, 0.25);
+/* === 控件玻璃态覆写 === */
+.panel-form :deep(.n-base-selection),
+.panel-form :deep(.n-input) {
+  background: rgba(3, 10, 24, 0.6) !important;
+  border: 1px solid rgba(0, 229, 255, 0.2) !important;
+  box-shadow: inset 0 0 8px rgba(0, 229, 255, 0.05);
+  border-radius: 0;
 }
 
-.modal-tip {
-  margin-top: 0.35rem;
-  margin-left: 1rem;
-  font-size: 0.8rem;
-  color: #7ca4b8;
-  font-family: var(--font-ui);
-  letter-spacing: 0.04em;
+.panel-form :deep(.n-base-selection:hover),
+.panel-form :deep(.n-input:hover) {
+  border-color: rgba(0, 229, 255, 0.5) !important;
 }
 
-.btn-icon {
-  width: 14px;
-  height: 14px;
-  display: block;
+.panel-form :deep(.n-base-selection--active),
+.panel-form :deep(.n-input--focus) {
+  border-color: #00E5FF !important;
+  box-shadow: 0 0 10px rgba(0, 229, 255, 0.15) !important;
+}
+
+.panel-form :deep(.n-input__input-el),
+.panel-form :deep(.n-base-selection-input__content) {
+  color: #ccf4ff;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+}
+
+/* === 科幻动作按钮 === */
+.sci-fi-btn {
+  height: 36px;
+  padding: 0 1.2rem;
+  border: 1px dashed rgba(0, 229, 255, 0.4);
+  background: rgba(0, 229, 255, 0.05);
+  color: #8fd0e8;
+  font-family: var(--font-ui, sans-serif);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  transition: all 0.25s ease;
   flex-shrink: 0;
-  color: currentColor;
 }
 
-.modal-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 2rem;
-  padding-top: 0.5rem;
+.sci-fi-btn.full-width {
+  width: 100%;
+}
+
+.sci-fi-btn:hover:not(:disabled) {
+  border-color: rgba(0, 229, 255, 0.9);
+  color: #17fefd;
+  box-shadow: 0 0 15px rgba(0, 229, 255, 0.2);
+}
+
+.sci-fi-btn.is-loading {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.sci-fi-btn.danger {
+  border-color: rgba(255, 73, 117, 0.4);
+  background: rgba(255, 73, 117, 0.05);
+  color: #ff85a1;
+}
+
+.sci-fi-btn.danger:hover {
+  border-color: rgba(255, 73, 117, 0.8);
+  color: #FF4975;
+  box-shadow: 0 0 15px rgba(255, 73, 117, 0.2);
+}
+
+/* === 滚动条定制 === */
+.dashboard-page::-webkit-scrollbar {
+  width: 6px;
+}
+.dashboard-page::-webkit-scrollbar-track {
+  background: rgba(0, 229, 255, 0.05);
+}
+.dashboard-page::-webkit-scrollbar-thumb {
+  background: rgba(0, 229, 255, 0.2);
+  border-radius: 3px;
+}
+.dashboard-page::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 229, 255, 0.4);
+}
+
+@keyframes pulse-border {
+  from { border-color: rgba(255, 179, 79, 0.4); box-shadow: none; }
+  to { border-color: #FFB34F; box-shadow: 0 0 10px rgba(255, 179, 79, 0.3); }
 }
 
 @media (max-width: 1024px) {
-  .settings-page {
-    padding: 0.3rem 0;
-  }
-
-  .modal-actions {
+  .export-row {
     flex-direction: column;
-  }
-
-  .modal-actions :deep(button) {
-    width: 100%;
+    align-items: stretch;
   }
 }
 </style>

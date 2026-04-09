@@ -1,13 +1,18 @@
 <template>
   <div class="chart-wrap">
     <div ref="chartRef" class="chart-canvas"></div>
+    
+    <div v-if="fullscreen" class="cyber-scanner-wrap" :style="scannerStyle">
+      <div class="cyber-scanner-beam"></div>
+    </div>
+
     <div v-if="loading" class="chart-mask">SYNCING LOG STREAM...</div>
   </div>
 </template>
 
 <script setup>
 import * as echarts from 'echarts'
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useEcharts } from '../../composables/useEcharts'
 import { createCyberTooltip, createHudCornerGraphics, createNoDataGraphic } from './cyberChartTheme'
 
@@ -30,9 +35,19 @@ const props = defineProps({
   },
 })
 
-const scanPhase = ref(0)
+// 计算扫描层布局：精确同步 ECharts 中 gridIndex: 1 的坐标系系边界
+const scannerStyle = computed(() => {
+  const z = props.enableZoom
+  const f = props.fullscreen
+  return {
+    left: `${f ? 55 : 45}px`,
+    right: `${f ? 24 : 15}px`,
+    top: z ? (f ? '46%' : '48%') : (f ? '48%' : '50%'),
+    bottom: `${z ? (f ? 38 : 40) : (f ? 24 : 22)}px`
+  }
+})
+
 const patternCache = ref(null)
-let scanTimer = null
 
 const getStatusTone = (value, max) => {
   if (!max) return { label: 'IDLE', color: '#7ba7bc' }
@@ -96,58 +111,6 @@ const getFlowSlices = () => {
   }))
 }
 
-const buildScanMarkLineData = (phase, fullscreen) => {
-  // 小图状态下不渲染扫描线与阈值基准线
-  if (!fullscreen) return []
-
-  const slices = getFlowSlices()
-  const timelineLabels = slices.map((item) => item.label)
-  const timelineValues = slices.map((item) => Number(item.total) || 0)
-
-  const lineMax = Math.max(...timelineValues, 10)
-  const average = timelineValues.length
-    ? timelineValues.reduce((sum, item) => sum + item, 0) / timelineValues.length
-    : 0
-  const warningLine = average ? Math.max(Math.round(average * 1.3), Math.round(lineMax * 0.68)) : 0
-  const scanIndex = timelineLabels.length ? phase % timelineLabels.length : 0
-  const scanLabel = timelineLabels[scanIndex]
-
-  return [
-    ...(warningLine
-      ? [
-          {
-            name: `THRESH ${warningLine}`,
-            yAxis: warningLine,
-            label: {
-              position: 'insideEndTop',
-              color: '#ffcfaa',
-              fontSize: fullscreen ? 10 : 9,
-            }
-          },
-        ]
-      : []),
-    ...(scanLabel
-      ? [
-          {
-            name: 'SCAN',
-            xAxis: scanLabel,
-            label: {
-              position: 'insideStartBottom',
-              color: 'rgba(0,229,255,0.85)',
-              fontSize: fullscreen ? 10 : 9,
-              formatter: '{b}'
-            },
-            lineStyle: {
-              color: 'rgba(0,229,255,0.65)',
-              width: 1.5,
-              type: 'dashed',
-            },
-          },
-        ]
-      : []),
-  ]
-}
-
 const buildOption = () => {
   const zoomEnabled = props.enableZoom
   const fullscreen = props.fullscreen
@@ -170,7 +133,11 @@ const buildOption = () => {
 
   const stackedBySource = topSourceNames.map((sourceName) => ({
     name: sourceName,
-    values: slices.map((slice) => {
+    type: 'bar',
+    stack: 'sourceThroughput',
+    xAxisIndex: 0,
+    yAxisIndex: 0,
+    data: slices.map((slice) => {
       const matched = (slice.sources || []).find((item) => String(item.name || 'Unknown') === sourceName)
       return Number(matched?.value) || 0
     }),
@@ -186,8 +153,6 @@ const buildOption = () => {
     : 0
   const warningLine = average ? Math.max(Math.round(average * 1.3), Math.round(lineMax * 0.68)) : 0
   const peakIndexes = findPeaks(timelineValues, warningLine || lineMax * 0.8)
-  const scanIndex = timelineLabels.length ? scanPhase.value % timelineLabels.length : 0
-  const scanLabel = timelineLabels[scanIndex]
 
   const hasData = timelineValues.length > 0
   const scanPattern = patternCache.value
@@ -202,6 +167,17 @@ const buildOption = () => {
       topIocValue: slice.top_ioc_value || '',
     }
   })
+
+  // 构造阈值警戒线数据
+  const warningLineData = warningLine && fullscreen ? [{
+    name: `THRESH ${warningLine}`,
+    yAxis: warningLine,
+    label: {
+      position: 'insideEndTop',
+      color: '#ffcfaa',
+      fontSize: fullscreen ? 10 : 9,
+    }
+  }] : []
 
   return {
     backgroundColor: 'transparent',
@@ -361,7 +337,7 @@ const buildOption = () => {
         stack: 'sourceThroughput',
         xAxisIndex: 0,
         yAxisIndex: 0,
-        data: sourceItem.values,
+        data: sourceItem.data,
         barMaxWidth: fullscreen ? 24 : 16,
         itemStyle: {
           color: sourcePalette[idx % sourcePalette.length],
@@ -423,16 +399,16 @@ const buildOption = () => {
           ]),
         },
         markPoint: {
-          symbol: 'circle', // 替换为圆形
+          symbol: 'circle',
           symbolSize: fullscreen ? 10 : 8,
-          symbolOffset: [0, 0], // 圆心对准数据点
+          symbolOffset: [0, 0],
           itemStyle: {
             color: '#ff0055',
             shadowBlur: 10,
             shadowColor: 'rgba(255,0,85,0.8)',
           },
           label: {
-            show: fullscreen, // 小图隐藏文本
+            show: fullscreen,
             position: 'top',
             distance: 12,
             formatter: (params) => {
@@ -462,7 +438,7 @@ const buildOption = () => {
             shadowBlur: 8,
             shadowColor: 'rgba(255,106,0,0.55)',
           },
-          data: buildScanMarkLineData(scanPhase.value, fullscreen),
+          data: warningLineData,
         },
       },
       {
@@ -515,16 +491,14 @@ const buildOption = () => {
         colorRight: 'rgba(0,229,255,0.35)',
         z: 10,
       }),
-      ...(hasData
-        ? []
-        : [createNoDataGraphic('NO LOG DATA', fullscreen)]),
+      ...(hasData ? [] : [createNoDataGraphic('NO LOG DATA', fullscreen)]),
     ],
   }
 }
 
 const emit = defineEmits(['chart-click'])
 
-const { chartRef, setPartialOption } = useEcharts(buildOption, () => [props.stats, props.fullscreen, props.enableZoom], {
+const { chartRef } = useEcharts(buildOption, () => [props.stats, props.fullscreen, props.enableZoom], {
   deep: false,
   throttleMs: 90,
   debounceMs: 180,
@@ -533,26 +507,6 @@ const { chartRef, setPartialOption } = useEcharts(buildOption, () => [props.stat
 
 onMounted(() => {
   patternCache.value = buildScanPattern()
-  scanTimer = setInterval(() => {
-    scanPhase.value = (scanPhase.value + 1) % 200
-    setPartialOption({
-      series: [
-        {
-          id: 'ingestTimelineSeries',
-          markLine: {
-            data: buildScanMarkLineData(scanPhase.value, props.fullscreen),
-          },
-        },
-      ],
-    })
-  }, 220)
-})
-
-onBeforeUnmount(() => {
-  if (scanTimer) {
-    clearInterval(scanTimer)
-    scanTimer = null
-  }
 })
 </script>
 
@@ -569,6 +523,43 @@ onBeforeUnmount(() => {
   min-height: 205px;
 }
 
+/* 扫描层容器：完美卡位在坐标系下半区域，不干扰鼠标事件 */
+.cyber-scanner-wrap {
+  position: absolute;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 10;
+  mix-blend-mode: screen; /* 滤色模式：与图表元素产生极佳的发光融合反应 */
+}
+
+/* 循环横扫的赛博光束：线性渐变与尖锐边缘组合 */
+.cyber-scanner-beam {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 18%; /* 光束身宽 */
+  background: linear-gradient(
+    to right,
+    transparent 0%,
+    rgba(0, 229, 255, 0.05) 50%,
+    rgba(0, 229, 255, 0.3) 90%,
+    rgba(0, 255, 157, 0.75) 100%
+  );
+  border-right: 2px solid #00ff9d; /* 领头高亮线 */
+  box-shadow: 4px 0 20px rgba(0, 255, 157, 0.6);
+  animation: cyber-sweep 3.5s cubic-bezier(0.4, 0.0, 0.6, 1) infinite;
+}
+
+/* 持续循环扫描动画 */
+@keyframes cyber-sweep {
+  0% {
+    left: -25%;
+  }
+  100% {
+    left: 105%;
+  }
+}
+
 @media (max-height: 860px) {
   .chart-canvas {
     min-height: 175px;
@@ -583,7 +574,7 @@ onBeforeUnmount(() => {
   justify-content: center;
   background: rgba(5, 8, 20, 0.4);
   color: #7ba7bc;
-  font-family: var(--font-ui);
+  font-family: var(--font-ui, 'Roboto Mono');
   font-size: 0.65rem;
   letter-spacing: 0.15em;
   text-transform: uppercase;

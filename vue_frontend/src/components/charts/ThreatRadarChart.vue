@@ -1,7 +1,9 @@
 <template>
   <div class="chart-wrap">
     <div class="radar-scan-overlay" :style="scanOverlayStyle" aria-hidden="true">
-      <div class="radar-scan-hex"></div>
+      <div ref="hexContainerRef" class="radar-scan-hex">
+        <canvas ref="particleCanvasRef" class="radar-particles"></canvas>
+      </div>
     </div>
     <div ref="chartRef" class="chart-canvas"></div>
     <div v-if="loading" class="chart-mask">EVALUATING THREAT POSTURE...</div>
@@ -9,7 +11,8 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
+import { useResizeObserver } from '@vueuse/core'
 import { useEcharts } from '../../composables/useEcharts'
 import { createCyberTooltip, createHudCornerGraphics, createNoDataGraphic } from './cyberChartTheme'
 
@@ -28,37 +31,16 @@ const props = defineProps({
   },
 })
 
+// --- 雷达图布局与等级逻辑 ---
 const getRadarLayout = (fullscreen) => {
-  if (fullscreen) {
-    return {
-      center: ['50%', '55%'],
-      radius: '74%',
-    }
-  }
-
-  return {
-    center: ['50%', '54%'],
-    radius: '68%',
-  }
+  if (fullscreen) return { center: ['50%', '55%'], radius: '74%' }
+  return { center: ['50%', '54%'], radius: '68%' }
 }
-
-const scanOverlayStyle = computed(() => {
-  const { center, radius } = getRadarLayout(props.fullscreen)
-  const radiusPercent = Number.parseFloat(String(radius).replace('%', '')) || 68
-  const overlayHalfPercent = `${radiusPercent / 2}%`
-  return {
-    '--scan-center-x': center[0],
-    '--scan-center-y': center[1],
-    '--scan-size': overlayHalfPercent,
-    '--scan-breathe-min': props.fullscreen ? '0.38' : '0.36',
-    '--scan-breathe-max': props.fullscreen ? '0.56' : '0.52',
-  }
-})
 
 const rateLevel = (value, max) => {
   if (!max) return { grade: 'C', color: '#7ba7bc' }
   const ratio = value / max
-  if (ratio >= 0.76) return { grade: 'A', color: '#ff0055' }
+  if (ratio >= 0.76) return { grade: 'A', color: '#ff0055' } // 保持红色
   if (ratio >= 0.5) return { grade: 'B', color: '#ff6a00' }
   return { grade: 'C', color: '#00ff9d' }
 }
@@ -102,11 +84,35 @@ const getThreatValues = () => {
   }
 }
 
+const scanOverlayStyle = computed(() => {
+  const { center, radius } = getRadarLayout(props.fullscreen)
+  const radiusPercent = Number.parseFloat(String(radius).replace('%', '')) || 68
+  const { indicators } = getThreatValues()
+  const n = indicators.length || 5
+  const points = Array.from({ length: n }).map((_, i) => {
+    const angleDeg = 90 - (360 / n) * i
+    const angleRad = (angleDeg * Math.PI) / 180
+    const x = 50 + 50 * Math.cos(angleRad)
+    const y = 50 - 50 * Math.sin(angleRad)
+    return `${x.toFixed(2)}% ${y.toFixed(2)}%`
+  })
+
+  return {
+    '--scan-center-x': center[0],
+    '--scan-center-y': center[1],
+    '--scan-radius': radiusPercent, 
+    '--scan-clip': `polygon(${points.join(', ')})`,
+    '--scan-breathe-min': props.fullscreen ? '0.38' : '0.36',
+    '--scan-breathe-max': props.fullscreen ? '0.56' : '0.52',
+  }
+})
+
 const buildOption = () => {
   const fullscreen = props.fullscreen
   const { indicators, indicatorMax, totalValues, verifiedValues, verifiedDisplayValues } = getThreatValues()
   const maxVal = Math.max(...indicatorMax, 1)
   const { center: radarCenter, radius: radarRadius } = getRadarLayout(fullscreen)
+  
   const indicatorConfig = indicators.map((item, idx) => {
     const value = Number(totalValues[idx]) || 0
     const level = rateLevel(value, maxVal)
@@ -123,7 +129,6 @@ const buildOption = () => {
       trigger: 'item',
       formatter: (params) => {
         if (!Array.isArray(params.value)) return ''
-
         const rows = indicators
           .map((item, idx) => {
             const value = params.seriesName === 'Verified Threats'
@@ -152,67 +157,21 @@ const buildOption = () => {
         fontSize: fullscreen ? 9 : 10,
         fontWeight: 600,
         rich: {
-          en: {
-            color: '#c7f1ff',
-            fontSize: fullscreen ? 9 : 10,
-            lineHeight: fullscreen ? 13 : 14,
-            fontWeight: 700,
-          },
-          zh: {
-            color: '#87c0d8',
-            fontSize: fullscreen ? 8 : 9,
-            lineHeight: fullscreen ? 12 : 13,
-          },
-          grade: {
-            color: '#00ff9d',
-            fontSize: fullscreen ? 8 : 9,
-            lineHeight: fullscreen ? 12 : 13,
-            fontWeight: 700,
-          },
-          cross: {
-            color: 'rgba(0,229,255,0.9)',
-            fontSize: fullscreen ? 9 : 10,
-            lineHeight: fullscreen ? 11 : 12,
-            fontWeight: 700,
-          },
+          en: { color: '#c7f1ff', fontSize: fullscreen ? 9 : 10, lineHeight: fullscreen ? 13 : 14, fontWeight: 700 },
+          grade: { color: '#00ff9d', fontSize: fullscreen ? 8 : 9, lineHeight: fullscreen ? 12 : 13, fontWeight: 700 },
+          cross: { color: 'rgba(0,229,255,0.9)', fontSize: fullscreen ? 9 : 10, lineHeight: fullscreen ? 11 : 12, fontWeight: 700 },
         },
       },
       splitArea: {
         areaStyle: {
-          color: fullscreen
-            ? ['rgba(0,229,255,0.02)', 'rgba(0,229,255,0.07)']
-            : ['rgba(0,229,255,0.015)', 'rgba(0,229,255,0.05)'],
+          color: fullscreen ? ['rgba(0,229,255,0.02)', 'rgba(0,229,255,0.07)'] : ['rgba(0,229,255,0.015)', 'rgba(0,229,255,0.05)'],
         },
       },
-      axisLine: {
-        lineStyle: {
-          color: 'rgba(0,229,255,0.42)',
-          shadowBlur: 8,
-          shadowColor: 'rgba(0,229,255,0.35)',
-        },
-      },
-      splitLine: {
-        lineStyle: {
-          color: 'rgba(0,255,157,0.35)',
-          type: 'dashed',
-        },
-      },
+      axisLine: { lineStyle: { color: 'rgba(0,229,255,0.42)', shadowBlur: 8, shadowColor: 'rgba(0,229,255,0.35)' } },
+      splitLine: { lineStyle: { color: 'rgba(0,255,157,0.35)', type: 'dashed' } },
       indicator: indicatorConfig,
     },
     series: [
-      {
-        id: 'radarHaloRing',
-        name: 'Radar Halo',
-        type: 'pie',
-        radius: fullscreen ? ['76%', '77.5%'] : ['70%', '71.5%'],
-        center: radarCenter,
-        silent: true,
-        z: 0,
-        animation: false,
-        label: { show: false },
-        labelLine: { show: false },
-        data: [{ value: 100, itemStyle: { color: 'rgba(0,229,255,0.2)' } }],
-      },
       {
         id: 'baselineEnvelope',
         name: 'Baseline Envelope',
@@ -220,19 +179,9 @@ const buildOption = () => {
         silent: true,
         z: 1,
         symbol: 'none',
-        lineStyle: {
-          color: 'rgba(103,154,176,0.65)',
-          width: 1,
-          type: 'dashed',
-        },
-        areaStyle: {
-          opacity: 0,
-        },
-        data: [
-          {
-            value: totalValues.map((value) => Math.max(1, Math.round(value * 0.75))),
-          },
-        ],
+        lineStyle: { color: 'rgba(103,154,176,0.65)', width: 1, type: 'dashed' },
+        areaStyle: { opacity: 0 },
+        data: [{ value: totalValues.map((value) => Math.max(1, Math.round(value * 0.75))) }],
       },
       {
         id: 'threatProfileLayer',
@@ -242,28 +191,10 @@ const buildOption = () => {
         symbol: 'diamond',
         symbolSize: fullscreen ? 6 : 5,
         showSymbol: true,
-        lineStyle: {
-          color: '#ff0055',
-          width: 1.8,
-          shadowBlur: 10,
-          shadowColor: 'rgba(255,0,85,0.5)',
-        },
-        areaStyle: {
-          color: 'rgba(255,0,85,0.26)',
-          shadowBlur: 16,
-          shadowColor: 'rgba(255,0,85,0.42)',
-        },
-        itemStyle: {
-          color: '#ff0055',
-          borderColor: '#ffd6e4',
-          borderWidth: 1,
-        },
-        data: [
-          {
-            value: totalValues,
-            name: 'Total Threats',
-          },
-        ],
+        lineStyle: { color: '#ff0055', width: 1.8, shadowBlur: 10, shadowColor: 'rgba(255,0,85,0.5)' },
+        areaStyle: { color: 'rgba(255,0,85,0.26)', shadowBlur: 16, shadowColor: 'rgba(255,0,85,0.42)' },
+        itemStyle: { color: '#ff0055', borderColor: '#ffd6e4', borderWidth: 1 },
+        data: [{ value: totalValues, name: 'Total Threats' }],
       },
       {
         id: 'verifiedThreatLayer',
@@ -273,57 +204,88 @@ const buildOption = () => {
         symbol: 'circle',
         symbolSize: fullscreen ? 4 : 3,
         showSymbol: true,
-        lineStyle: {
-          color: '#00e5ff',
-          width: 1.35,
-          type: 'dashed',
-          shadowBlur: 8,
-          shadowColor: 'rgba(0,229,255,0.48)',
-        },
-        areaStyle: {
-          color: 'rgba(0,229,255,0.04)',
-        },
-        itemStyle: {
-          color: '#00e5ff',
-          borderColor: '#dff8ff',
-          borderWidth: 1,
-        },
-        data: [
-          {
-            value: verifiedDisplayValues,
-            name: 'Verified Threats',
-          },
-        ],
+        lineStyle: { color: '#00e5ff', width: 1.35, type: 'dashed', shadowBlur: 8, shadowColor: 'rgba(0,229,255,0.48)' },
+        areaStyle: { color: 'rgba(0,229,255,0.04)' },
+        itemStyle: { color: '#00e5ff', borderColor: '#dff8ff', borderWidth: 1 },
+        data: [{ value: verifiedDisplayValues, name: 'Verified Threats' }],
       },
     ],
     graphic: [
-      ...createHudCornerGraphics({
-        fullscreen,
-        left: [14, 10],
-        top: [10, 8],
-        right: [18, 12],
-        bottom: [12, 8],
-        lineLength: 30,
-        lineHeight: 14,
-        colorLeft: 'rgba(0,229,255,0.45)',
-        colorRight: 'rgba(0,229,255,0.4)',
-        z: 10,
-      }),
-      ...(totalValues.reduce((sum, value) => sum + (Number(value) || 0), 0)
-        ? []
-        : [createNoDataGraphic('NO THREAT DATA', fullscreen)]),
+      ...createHudCornerGraphics({ fullscreen, z: 10 }),
+      ...(totalValues.reduce((sum, value) => sum + (Number(value) || 0), 0) ? [] : [createNoDataGraphic('NO THREAT DATA', fullscreen)]),
     ],
   }
 }
 
 const emit = defineEmits(['chart-click'])
-
 const { chartRef } = useEcharts(buildOption, () => [props.stats, props.fullscreen], {
   deep: false,
   throttleMs: 90,
   debounceMs: 180,
   onClick: (params) => emit('chart-click', params)
 })
+
+// --- Canvas 粒子系统（亮绿色细节） ---
+const hexContainerRef = ref(null)
+const particleCanvasRef = ref(null)
+let animationFrameId = null
+const particles = []
+
+class Particle {
+  constructor(w, h) {
+    this.reset(w, h)
+  }
+  reset(w, h) {
+    this.x = Math.random() * w
+    this.y = Math.random() * h
+    this.size = Math.random() * 1.2 + 0.4
+    this.vx = (Math.random() - 0.5) * 0.25
+    this.vy = (Math.random() - 0.5) * 0.25
+    this.life = Math.random() * Math.PI * 2
+  }
+  update(w, h) {
+    this.x += this.vx
+    this.y += this.vy
+    this.life += 0.025
+    if (this.x < 0 || this.x > w || this.y < 0 || this.y > h) this.reset(w, h)
+  }
+  draw(ctx) {
+    const alpha = ((Math.sin(this.life) + 1) / 2) * 0.5 + 0.1
+    ctx.globalAlpha = alpha
+    ctx.fillStyle = '#00ff9d' // 粒子设为亮绿色
+    ctx.beginPath()
+    ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2)
+    ctx.fill()
+  }
+}
+
+const renderParticles = () => {
+  const canvas = particleCanvasRef.value
+  if (!canvas) return
+  const ctx = canvas.getContext('2d')
+  const { width, height } = canvas
+  ctx.clearRect(0, 0, width, height)
+  particles.forEach(p => {
+    p.update(width, height)
+    p.draw(ctx)
+  })
+  animationFrameId = requestAnimationFrame(renderParticles)
+}
+
+useResizeObserver(hexContainerRef, (entries) => {
+  const entry = entries[0]
+  const canvas = particleCanvasRef.value
+  if (!canvas || !entry) return
+  const { width, height } = entry.contentRect
+  canvas.width = width
+  canvas.height = height
+  particles.length = 0
+  const count = props.fullscreen ? 55 : 30
+  for (let i = 0; i < count; i++) particles.push(new Particle(width, height))
+})
+
+onMounted(() => { animationFrameId = requestAnimationFrame(renderParticles) })
+onBeforeUnmount(() => { if (animationFrameId) cancelAnimationFrame(animationFrameId) })
 </script>
 
 <style scoped>
@@ -332,6 +294,7 @@ const { chartRef } = useEcharts(buildOption, () => [props.stats, props.fullscree
   width: 100%;
   height: 100%;
   overflow: hidden;
+  container-type: size; 
 }
 
 .chart-canvas {
@@ -354,42 +317,61 @@ const { chartRef } = useEcharts(buildOption, () => [props.stats, props.fullscree
   position: absolute;
   left: var(--scan-center-x, 50%);
   top: var(--scan-center-y, 54%);
-  width: calc(var(--scan-size, 68%) * 2);
-  height: calc(var(--scan-size, 68%) * 2);
+  width: calc(var(--scan-radius, 68) * 1cqmin);
+  height: calc(var(--scan-radius, 68) * 1cqmin);
   transform: translate(-50%, -50%);
-  border-radius: 50%;
-  background: conic-gradient(from 0deg, rgba(0, 229, 255, 0) 0deg, rgba(0, 255, 180, 0.02) 80deg, rgba(0, 229, 255, 0.18) 92deg, rgba(0, 229, 255, 0.02) 108deg, rgba(0, 229, 255, 0) 122deg, rgba(0, 229, 255, 0) 360deg);
-  border: 1px solid rgba(0, 229, 255, 0.1);
-  box-shadow: inset 0 0 18px rgba(0, 229, 255, 0.08);
-  filter: saturate(0.85);
+  clip-path: var(--scan-clip);
+  /* 背景微弱的绿色呼吸光晕 */
+  background: radial-gradient(circle, rgba(0, 255, 157, 0.05) 0%, rgba(0, 255, 157, 0) 75%);
   animation: radar-hex-breathe 5.2s ease-in-out infinite;
 }
 
-.radar-scan-hex::before,
+.radar-particles {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+
+/* 锐利的亮绿色雷达扫描线 */
 .radar-scan-hex::after {
   content: '';
   position: absolute;
   inset: 0;
-  border-radius: inherit;
-}
-
-.radar-scan-hex::before {
-  background: none;
-  opacity: 0;
-}
-
-.radar-scan-hex::after {
-  background: conic-gradient(from 0deg, rgba(0, 229, 255, 0) 0deg, rgba(0, 229, 255, 0.05) 82deg, rgba(0, 229, 255, 0.34) 90deg, rgba(0, 229, 255, 0.07) 98deg, rgba(0, 229, 255, 0) 112deg, rgba(0, 229, 255, 0) 360deg);
+  border-radius: 50%;
+  z-index: 2;
+  /* Conic-gradient 调整为亮绿色调 */
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    rgba(0, 255, 157, 0.03) 180deg,
+    rgba(0, 255, 157, 0.3) 345deg,
+    rgba(220, 255, 240, 0.9) 360deg
+  );
   mix-blend-mode: screen;
-  filter: blur(1px);
+  animation: radar-sweep-rotate 3.8s linear infinite; /* 稍微加快一点速度更有动感 */
   transform-origin: center;
-  animation: radar-sweep-rotate 6.2s linear infinite;
+}
+
+@keyframes radar-sweep-rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes radar-hex-breathe {
+  0%, 100% {
+    opacity: var(--scan-breathe-min, 0.36);
+    transform: translate(-50%, -50%) scale(0.985);
+  }
+  50% {
+    opacity: var(--scan-breathe-max, 0.52);
+    transform: translate(-50%, -50%) scale(1.01);
+  }
 }
 
 @media (max-height: 860px) {
-  .chart-canvas {
-    min-height: 175px;
-  }
+  .chart-canvas { min-height: 175px; }
 }
 
 .chart-mask {
@@ -410,25 +392,5 @@ const { chartRef } = useEcharts(buildOption, () => [props.stats, props.fullscree
 @keyframes pulse-mask {
   0%, 100% { opacity: 0.6; }
   50% { opacity: 1; }
-}
-
-@keyframes radar-sweep-rotate {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@keyframes radar-hex-breathe {
-  0%, 100% {
-    opacity: var(--scan-breathe-min, 0.36);
-    transform: translate(-50%, -50%) scale(0.985);
-  }
-  50% {
-    opacity: var(--scan-breathe-max, 0.52);
-    transform: translate(-50%, -50%) scale(1.01);
-  }
 }
 </style>

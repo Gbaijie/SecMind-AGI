@@ -7,7 +7,7 @@
 
 <script setup>
 import * as echarts from 'echarts'
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { onBeforeUnmount, watch, ref } from 'vue'
 import { useEcharts } from '../../composables/useEcharts'
 import { createCyberTooltip, createHudCornerGraphics, createNoDataGraphic } from './cyberChartTheme'
 
@@ -208,12 +208,10 @@ const buildOption = () => {
     animationDurationUpdate: 400, 
     animationEasing: 'cubicOut',  
 
-    // 新增：使用全局 DOM Tooltip，复用 cyberChartTheme.css 中的样式
     tooltip: createCyberTooltip({
       className: 'cyber-tooltip category-tooltip', 
       trigger: 'item',
       formatter: (params) => {
-        // 仅对主分类环显示提示
         if (params.seriesId !== 'categoryMainRing') return '';
         
         const conf = params.data?.confidence || 0;
@@ -502,15 +500,26 @@ const resumeOrbit = () => {
   }
 }
 
-onMounted(() => {
-  resumeOrbit()
-})
+let initialRenderTimer = null
+
+watch(
+  () => [props.stats, props.fullscreen], 
+  () => {
+    pauseOrbit()
+    if (orbitResumeTimer) clearTimeout(orbitResumeTimer)
+    if (initialRenderTimer) clearTimeout(initialRenderTimer)
+
+    // 800ms 后再启动齿轮环的旋转
+    initialRenderTimer = setTimeout(() => {
+      resumeOrbit()
+    }, 800)
+  },
+  { immediate: true } 
+)
 
 onBeforeUnmount(() => {
-  if (orbitResumeTimer) {
-    clearTimeout(orbitResumeTimer)
-    orbitResumeTimer = null
-  }
+  if (initialRenderTimer) clearTimeout(initialRenderTimer)
+  if (orbitResumeTimer) clearTimeout(orbitResumeTimer)
   pauseOrbit()
 })
 </script>

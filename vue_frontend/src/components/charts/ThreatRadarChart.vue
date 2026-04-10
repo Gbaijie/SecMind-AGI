@@ -33,8 +33,8 @@ const props = defineProps({
 
 // --- 雷达图布局与等级逻辑 ---
 const getRadarLayout = (fullscreen) => {
-  if (fullscreen) return { center: ['50%', '55%'], radius: '74%' }
-  return { center: ['50%', '54%'], radius: '68%' }
+  if (fullscreen) return { center: ['50%', '50%'], radius: '77%' }
+  return { center: ['50%', '50%'], radius: '63%' }
 }
 
 const rateLevel = (value, max) => {
@@ -117,7 +117,7 @@ const buildOption = () => {
     const value = Number(totalValues[idx]) || 0
     const level = rateLevel(value, maxVal)
     return {
-      name: `{en|${item}}\n{grade|${level.grade}}\n{cross|+}`,
+      name: `{en|${item}}\n{grade|${level.grade}}`,
       max: Number(indicatorMax[idx]) || maxVal,
     }
   })
@@ -154,21 +154,35 @@ const buildOption = () => {
       axisName: {
         color: '#eef5ff',
         fontFamily: 'Roboto Mono',
-        fontSize: fullscreen ? 9 : 10,
-        fontWeight: 600,
+        fontSize: fullscreen ? 13 : 11,
+        fontWeight: 500,
         rich: {
-          en: { color: '#c7f1ff', fontSize: fullscreen ? 9 : 10, lineHeight: fullscreen ? 13 : 14, fontWeight: 700 },
-          grade: { color: '#00ff9d', fontSize: fullscreen ? 8 : 9, lineHeight: fullscreen ? 12 : 13, fontWeight: 700 },
-          cross: { color: 'rgba(0,229,255,0.9)', fontSize: fullscreen ? 9 : 10, lineHeight: fullscreen ? 11 : 12, fontWeight: 700 },
+          en: { color: '#d9f6ff', fontSize: fullscreen ? 13 : 11, lineHeight: fullscreen ? 17 : 15, fontWeight: 500 },
+          grade: { color: '#00ff9d', fontSize: fullscreen ? 12 : 10, lineHeight: fullscreen ? 16 : 14, fontWeight: 500 },
         },
       },
       splitArea: {
         areaStyle: {
-          color: fullscreen ? ['rgba(0,229,255,0.02)', 'rgba(0,229,255,0.07)'] : ['rgba(0,229,255,0.015)', 'rgba(0,229,255,0.05)'],
+          color: fullscreen ? ['rgba(0,229,255,0.03)', 'rgba(0,229,255,0.1)'] : ['rgba(0,229,255,0.015)', 'rgba(0,229,255,0.05)'],
         },
       },
-      axisLine: { lineStyle: { color: 'rgba(0,229,255,0.42)', shadowBlur: 8, shadowColor: 'rgba(0,229,255,0.35)' } },
-      splitLine: { lineStyle: { color: 'rgba(0,255,157,0.35)', type: 'dashed' } },
+      axisLine: {
+        lineStyle: {
+          color: 'rgba(0,229,255,0.58)',
+          width: fullscreen ? 1.8 : 1.2,
+          shadowBlur: 10,
+          shadowColor: 'rgba(0,229,255,0.42)',
+        },
+      },
+      splitLine: {
+        lineStyle: {
+          color: 'rgba(0,255,157,0.5)',
+          width: fullscreen ? 1.2 : 0.9,
+          type: 'dashed',
+          shadowBlur: 6,
+          shadowColor: 'rgba(0,255,157,0.22)',
+        },
+      },
       indicator: indicatorConfig,
     },
     series: [
@@ -191,8 +205,8 @@ const buildOption = () => {
         symbol: 'diamond',
         symbolSize: fullscreen ? 6 : 5,
         showSymbol: true,
-        lineStyle: { color: '#ff0055', width: 1.8, shadowBlur: 10, shadowColor: 'rgba(255,0,85,0.5)' },
-        areaStyle: { color: 'rgba(255,0,85,0.26)', shadowBlur: 16, shadowColor: 'rgba(255,0,85,0.42)' },
+        lineStyle: { color: '#ff0055', width: fullscreen ? 2.6 : 1.8, shadowBlur: 14, shadowColor: 'rgba(255,0,85,0.62)' },
+        areaStyle: { color: 'rgba(255,0,85,0.3)', shadowBlur: 18, shadowColor: 'rgba(255,0,85,0.48)' },
         itemStyle: { color: '#ff0055', borderColor: '#ffd6e4', borderWidth: 1 },
         data: [{ value: totalValues, name: 'Total Threats' }],
       },
@@ -204,8 +218,8 @@ const buildOption = () => {
         symbol: 'circle',
         symbolSize: fullscreen ? 4 : 3,
         showSymbol: true,
-        lineStyle: { color: '#00e5ff', width: 1.35, type: 'dashed', shadowBlur: 8, shadowColor: 'rgba(0,229,255,0.48)' },
-        areaStyle: { color: 'rgba(0,229,255,0.04)' },
+        lineStyle: { color: '#00e5ff', width: fullscreen ? 2.1 : 1.35, type: 'dashed', shadowBlur: 12, shadowColor: 'rgba(0,229,255,0.58)' },
+        areaStyle: { color: 'rgba(0,229,255,0.06)' },
         itemStyle: { color: '#00e5ff', borderColor: '#dff8ff', borderWidth: 1 },
         data: [{ value: verifiedDisplayValues, name: 'Verified Threats' }],
       },
@@ -238,9 +252,9 @@ class Particle {
   reset(w, h) {
     this.x = Math.random() * w
     this.y = Math.random() * h
-    this.size = Math.random() * 1.2 + 0.4
-    this.vx = (Math.random() - 0.5) * 0.25
-    this.vy = (Math.random() - 0.5) * 0.25
+    this.size = Math.random() * 1.6 + 0.7
+    this.vx = (Math.random() - 0.5) * 0.34
+    this.vy = (Math.random() - 0.5) * 0.34
     this.life = Math.random() * Math.PI * 2
   }
   update(w, h) {
@@ -250,12 +264,15 @@ class Particle {
     if (this.x < 0 || this.x > w || this.y < 0 || this.y > h) this.reset(w, h)
   }
   draw(ctx) {
-    const alpha = ((Math.sin(this.life) + 1) / 2) * 0.5 + 0.1
+    const alpha = ((Math.sin(this.life) + 1) / 2) * 0.58 + 0.2
     ctx.globalAlpha = alpha
-    ctx.fillStyle = '#00ff9d' // 粒子设为亮绿色
+    ctx.fillStyle = '#7bffd4'
+    ctx.shadowBlur = 9
+    ctx.shadowColor = 'rgba(0,255,157,0.85)'
     ctx.beginPath()
     ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2)
     ctx.fill()
+    ctx.shadowBlur = 0
   }
 }
 
@@ -322,7 +339,10 @@ onBeforeUnmount(() => { if (animationFrameId) cancelAnimationFrame(animationFram
   transform: translate(-50%, -50%);
   clip-path: var(--scan-clip);
   /* 背景微弱的绿色呼吸光晕 */
-  background: radial-gradient(circle, rgba(0, 255, 157, 0.05) 0%, rgba(0, 255, 157, 0) 75%);
+  background: radial-gradient(circle, rgba(0, 255, 157, 0.1) 0%, rgba(0, 255, 157, 0.02) 48%, rgba(0, 255, 157, 0) 78%);
+  box-shadow:
+    inset 0 0 30px rgba(0, 255, 157, 0.18),
+    0 0 18px rgba(0, 255, 157, 0.22);
   animation: radar-hex-breathe 5.2s ease-in-out infinite;
 }
 
@@ -332,6 +352,18 @@ onBeforeUnmount(() => { if (animationFrameId) cancelAnimationFrame(animationFram
   position: absolute;
   inset: 0;
   z-index: 1;
+}
+
+.radar-scan-hex::before {
+  content: '';
+  position: absolute;
+  inset: 6%;
+  border: 1px solid rgba(0, 255, 157, 0.32);
+  border-radius: 50%;
+  box-shadow:
+    inset 0 0 12px rgba(0, 255, 157, 0.22),
+    0 0 14px rgba(0, 255, 157, 0.16);
+  animation: radar-ring-pulse 2.8s ease-in-out infinite;
 }
 
 /* 锐利的亮绿色雷达扫描线 */
@@ -345,12 +377,13 @@ onBeforeUnmount(() => { if (animationFrameId) cancelAnimationFrame(animationFram
   background: conic-gradient(
     from 0deg,
     transparent 0deg,
-    rgba(0, 255, 157, 0.03) 180deg,
-    rgba(0, 255, 157, 0.3) 345deg,
-    rgba(220, 255, 240, 0.9) 360deg
+    rgba(0, 255, 157, 0.07) 164deg,
+    rgba(0, 255, 157, 0.55) 338deg,
+    rgba(220, 255, 240, 0.98) 360deg
   );
   mix-blend-mode: screen;
-  animation: radar-sweep-rotate 3.8s linear infinite; /* 稍微加快一点速度更有动感 */
+  filter: drop-shadow(0 0 8px rgba(0, 255, 157, 0.52));
+  animation: radar-sweep-rotate 3.2s linear infinite;
   transform-origin: center;
 }
 
@@ -361,12 +394,24 @@ onBeforeUnmount(() => { if (animationFrameId) cancelAnimationFrame(animationFram
 
 @keyframes radar-hex-breathe {
   0%, 100% {
-    opacity: var(--scan-breathe-min, 0.36);
+    opacity: var(--scan-breathe-min, 0.42);
     transform: translate(-50%, -50%) scale(0.985);
   }
   50% {
-    opacity: var(--scan-breathe-max, 0.52);
-    transform: translate(-50%, -50%) scale(1.01);
+    opacity: var(--scan-breathe-max, 0.64);
+    transform: translate(-50%, -50%) scale(1.015);
+  }
+}
+
+@keyframes radar-ring-pulse {
+  0%,
+  100% {
+    opacity: 0.58;
+    transform: scale(0.985);
+  }
+  50% {
+    opacity: 0.95;
+    transform: scale(1.01);
   }
 }
 

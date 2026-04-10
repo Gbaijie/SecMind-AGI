@@ -35,18 +35,6 @@ const props = defineProps({
   },
 })
 
-// 计算扫描层布局：精确同步 ECharts 中 gridIndex: 1 的坐标系系边界
-const scannerStyle = computed(() => {
-  const z = props.enableZoom
-  const f = props.fullscreen
-  return {
-    left: `${f ? 55 : 45}px`,
-    right: `${f ? 24 : 15}px`,
-    top: z ? (f ? '46%' : '48%') : (f ? '48%' : '50%'),
-    bottom: `${z ? (f ? 38 : 40) : (f ? 24 : 22)}px`
-  }
-})
-
 const patternCache = ref(null)
 
 const getStatusTone = (value, max) => {
@@ -114,6 +102,10 @@ const getFlowSlices = () => {
 const buildOption = () => {
   const zoomEnabled = props.enableZoom
   const fullscreen = props.fullscreen
+  const axisFontSize = fullscreen ? 13 : 10
+  const axisFontSizeSmall = fullscreen ? 12 : 10
+  const markFontSize = fullscreen ? 12 : 10
+  const zoomTextSize = fullscreen ? 10 : 9
 
   const slices = getFlowSlices()
   const timelineLabels = slices.map((item) => item.label)
@@ -183,16 +175,16 @@ const buildOption = () => {
     backgroundColor: 'transparent',
     grid: [
       {
-        left: fullscreen ? 55 : 45,
-        right: fullscreen ? 24 : 15,
-        top: fullscreen ? 24 : 20,
-        height: zoomEnabled ? (fullscreen ? '35%' : '32%') : (fullscreen ? '38%' : '36%'),
+        left: fullscreen ? 66 : 54,
+        right: fullscreen ? 34 : 24,
+        top: fullscreen ? 30 : 26,
+        height: zoomEnabled ? (fullscreen ? '31%' : '29%') : (fullscreen ? '33%' : '31%'),
       },
       {
-        left: fullscreen ? 55 : 45,
-        right: fullscreen ? 24 : 15,
-        top: zoomEnabled ? (fullscreen ? '46%' : '48%') : (fullscreen ? '48%' : '50%'),
-        bottom: zoomEnabled ? (fullscreen ? 38 : 40) : (fullscreen ? 24 : 22),
+        left: fullscreen ? 66 : 54,
+        right: fullscreen ? 34 : 24,
+        top: zoomEnabled ? (fullscreen ? '43%' : '45%') : (fullscreen ? '45%' : '47%'),
+        bottom: zoomEnabled ? (fullscreen ? 48 : 46) : (fullscreen ? 32 : 30),
       },
     ],
     dataZoom: zoomEnabled
@@ -234,7 +226,7 @@ const buildOption = () => {
               lineStyle: { color: 'rgba(0,255,157,0.5)', width: 1.2 },
               areaStyle: { color: 'rgba(0,255,157,0.1)' },
             },
-            textStyle: { color: '#7ba7bc', fontFamily: 'Roboto Mono', fontSize: 9 },
+            textStyle: { color: '#7ba7bc', fontFamily: 'Roboto Mono', fontSize: zoomTextSize },
           },
         ]
       : [],
@@ -286,7 +278,7 @@ const buildOption = () => {
         axisLabel: {
           color: '#d8e9f5',
           fontFamily: 'Roboto Mono',
-          fontSize: fullscreen ? 11 : 10,
+          fontSize: axisFontSizeSmall,
           fontWeight: 500,
           interval: 'auto',
           hideOverlap: true,
@@ -312,7 +304,7 @@ const buildOption = () => {
             type: 'dashed',
           },
         },
-        axisLabel: { color: '#8aa6ba', fontSize: fullscreen ? 11 : 10, fontFamily: 'Roboto Mono' },
+        axisLabel: { color: '#8aa6ba', fontSize: axisFontSize, fontFamily: 'Roboto Mono' },
       },
       {
         type: 'value',
@@ -326,7 +318,7 @@ const buildOption = () => {
             type: 'dashed',
           },
         },
-        axisLabel: { color: '#8aa6ba', fontSize: fullscreen ? 11 : 10, fontFamily: 'Roboto Mono' },
+        axisLabel: { color: '#8aa6ba', fontSize: axisFontSize, fontFamily: 'Roboto Mono' },
       },
     ],
     series: [
@@ -356,6 +348,7 @@ const buildOption = () => {
         id: 'scanTextureSeries',
         name: 'Scan Texture',
         type: 'line',
+        step: 'middle',
         xAxisIndex: 1,
         yAxisIndex: 1,
         data: timelineValues,
@@ -370,6 +363,94 @@ const buildOption = () => {
         z: 0,
       },
       {
+        id: 'flowScannerBeamSeries',
+        name: 'Scanner Beam',
+        type: 'custom',
+        xAxisIndex: 1,
+        yAxisIndex: 1,
+        z: 1, // 放在底纹和实际线条之间
+        silent: true,
+        // 只需触发一次 renderItem 即可绘制完整的全图扫描
+        data: timelineValues.length ? [0] : [], 
+        renderItem: (params, api) => {
+          if (!fullscreen) return
+
+          const len = timelineValues.length
+          if (len < 2) return
+
+          const points = []
+          // 遍历数据并利用 api.coord 转换为像素坐标，重构出 step: 'middle' 的多边形路径
+          for (let i = 0; i < len; i++) {
+            const pt = api.coord([i, timelineValues[i]])
+            if (i > 0) {
+              const prevPt = api.coord([i - 1, timelineValues[i - 1]])
+              const midX = (prevPt[0] + pt[0]) / 2
+              points.push([midX, prevPt[1]], [midX, pt[1]])
+            }
+            points.push(pt)
+          }
+
+          // 闭合底部多边形
+          const firstPt = api.coord([0, timelineValues[0]])
+          const lastPt = api.coord([len - 1, timelineValues[len - 1]])
+          const bottomY = api.coord([0, 0])[1] // Y 轴为 0 时的像素高度
+
+          points.push([lastPt[0], bottomY], [firstPt[0], bottomY])
+
+          const gridWidth = lastPt[0] - firstPt[0]
+          const beamWidth = gridWidth * 0.18 // 光束宽度占可视区的 18%
+
+          return {
+            type: 'group',
+            clipPath: {
+              type: 'polygon',
+              shape: { points }
+            },
+            children: [
+              // 光束渐变主体
+              {
+                type: 'rect',
+                shape: { x: firstPt[0] - beamWidth, y: 0, width: beamWidth, height: bottomY },
+                style: {
+                  fill: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
+                    { offset: 0, color: 'rgba(0, 229, 255, 0)' },
+                    { offset: 0.5, color: 'rgba(0, 229, 255, 0.05)' },
+                    { offset: 0.9, color: 'rgba(0, 229, 255, 0.3)' },
+                    { offset: 1, color: 'rgba(0, 255, 157, 0.75)' }
+                  ])
+                },
+                keyframeAnimation: {
+                  duration: 3500,
+                  loop: true,
+                  keyframes: [
+                    { percent: 0, x: 0 },
+                    { percent: 1, x: gridWidth + beamWidth * 1.5 }
+                  ]
+                }
+              },
+              // 光束前侧的高亮引导线
+              {
+                type: 'rect',
+                shape: { x: firstPt[0] - 2, y: 0, width: 2, height: bottomY },
+                style: {
+                  fill: '#00ff9d',
+                  shadowBlur: 16,
+                  shadowColor: 'rgba(0, 255, 157, 0.6)'
+                },
+                keyframeAnimation: {
+                  duration: 3500,
+                  loop: true,
+                  keyframes: [
+                    { percent: 0, x: 0 },
+                    { percent: 1, x: gridWidth + beamWidth * 1.5 }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
         id: 'ingestTimelineSeries',
         name: 'Ingest Timeline',
         type: 'line',
@@ -379,10 +460,10 @@ const buildOption = () => {
         step: 'middle',
         z: 2,
         symbol: 'circle',
-        symbolSize: fullscreen ? 6 : 5,
+        symbolSize: fullscreen ? 7 : 6,
         lineStyle: {
           color: '#00ff9d',
-          width: 2,
+          width: 2.5,
           shadowBlur: 12,
           shadowColor: 'rgba(0,255,157,0.8)',
         },
@@ -400,7 +481,7 @@ const buildOption = () => {
         },
         markPoint: {
           symbol: 'circle',
-          symbolSize: fullscreen ? 10 : 8,
+          symbolSize: fullscreen ? 11 : 9,
           symbolOffset: [0, 0],
           itemStyle: {
             color: '#ff0055',
@@ -417,7 +498,7 @@ const buildOption = () => {
               return shortText(feature.replace('突增归因：', ''), 36)
             },
             color: '#fff',
-            fontSize: fullscreen ? 10 : 9,
+            fontSize: markFontSize,
             textShadowColor: '#000',
             textShadowBlur: 4,
           },
@@ -523,42 +604,6 @@ onMounted(() => {
   min-height: 205px;
 }
 
-/* 扫描层容器：完美卡位在坐标系下半区域，不干扰鼠标事件 */
-.cyber-scanner-wrap {
-  position: absolute;
-  overflow: hidden;
-  pointer-events: none;
-  z-index: 10;
-  mix-blend-mode: screen; /* 滤色模式：与图表元素产生极佳的发光融合反应 */
-}
-
-/* 循环横扫的赛博光束：线性渐变与尖锐边缘组合 */
-.cyber-scanner-beam {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 18%; /* 光束身宽 */
-  background: linear-gradient(
-    to right,
-    transparent 0%,
-    rgba(0, 229, 255, 0.05) 50%,
-    rgba(0, 229, 255, 0.3) 90%,
-    rgba(0, 255, 157, 0.75) 100%
-  );
-  border-right: 2px solid #00ff9d; /* 领头高亮线 */
-  box-shadow: 4px 0 20px rgba(0, 255, 157, 0.6);
-  animation: cyber-sweep 3.5s cubic-bezier(0.4, 0.0, 0.6, 1) infinite;
-}
-
-/* 持续循环扫描动画 */
-@keyframes cyber-sweep {
-  0% {
-    left: -25%;
-  }
-  100% {
-    left: 105%;
-  }
-}
 
 @media (max-height: 860px) {
   .chart-canvas {

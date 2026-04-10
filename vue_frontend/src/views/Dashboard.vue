@@ -569,26 +569,21 @@ const handleFullscreenModalChange = (show) => {
 }
 
 .chart-panel-host:fullscreen .chart-card :deep(.fui-card-header),
-.chart-panel-host:-webkit-full-screen .chart-card :deep(.fui-card-header),
-.topology-panel-host:fullscreen .center-topology-card :deep(.fui-card-header),
-.topology-panel-host:-webkit-full-screen .center-topology-card :deep(.fui-card-header) {
-  min-height: 30px;
-  padding: 0.36rem 0.72rem;
+.chart-panel-host:-webkit-full-screen .chart-card :deep(.fui-card-header) {
+  min-height: 60px;
+  padding: 0.6rem 1.5rem;
 }
 
 .chart-panel-host:fullscreen .chart-card :deep(.fui-card-title),
-.chart-panel-host:-webkit-full-screen .chart-card :deep(.fui-card-title),
-.topology-panel-host:fullscreen .center-topology-card :deep(.fui-card-title),
-.topology-panel-host:-webkit-full-screen .center-topology-card :deep(.fui-card-title) {
-  font-size: 0.62rem;
-  letter-spacing: 0.1em;
+.chart-panel-host:-webkit-full-screen .chart-card :deep(.fui-card-title) {
+  font-size: 1.25rem;
+  letter-spacing: 0.14em;
+  padding-left: 1rem;
 }
 
 .chart-panel-host:fullscreen .chart-card :deep(.fui-card-header-right),
-.chart-panel-host:-webkit-full-screen .chart-card :deep(.fui-card-header-right),
-.topology-panel-host:fullscreen .center-topology-card :deep(.fui-card-header-right),
-.topology-panel-host:-webkit-full-screen .center-topology-card :deep(.fui-card-header-right) {
-  gap: 0.24rem;
+.chart-panel-host:-webkit-full-screen .chart-card :deep(.fui-card-header-right) {
+  gap: 0.32rem;
 }
 
 .chart-panel-host:fullscreen .chart-card :deep(.fui-icon-btn),

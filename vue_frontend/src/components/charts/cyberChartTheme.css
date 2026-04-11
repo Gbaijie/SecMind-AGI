@@ -9,8 +9,8 @@
 }
 
 .cyber-tooltip.category-tooltip .cyber-tip-body {
-    border: 0;
-    background: rgba(4, 8, 18, 0.76);
+    border: 1.5px solid rgba(0, 229, 255, 0.5);
+    background: rgba(4, 8, 18, 0.85);
     box-shadow: none;
     padding: 12px 14px;
 }
@@ -70,8 +70,8 @@
 }
 
 .cyber-tooltip .state-dot {
-    width: 7px;
-    height: 7px;
+    width: 6px;
+    height: 6px;
     border-radius: 50%;
-    box-shadow: 0 0 8px currentColor;
+    box-shadow: 0 0 4px currentColor;
 }

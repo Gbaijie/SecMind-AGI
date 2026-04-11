@@ -94,11 +94,6 @@
             </svg>
           </button>
         </template>
-        <div class="summary-strip">
-          <span>RECORDS {{ dashboardStats.summary?.total_records || 0 }}</span>
-          <span>SOURCES {{ dashboardStats.summary?.total_sources || 0 }}</span>
-          <span>CAT {{ dashboardStats.summary?.total_categories || 0 }}</span>
-        </div>
         <ChartDrillGuidance
           :banner-visible="isBannerVisible('category')"
           :intro-visible="isIntroVisible('category')"
@@ -172,11 +167,6 @@
         </div>
 
         <div class="expanded-chart-content" v-else>
-          <div class="summary-strip summary-strip--expanded">
-            <span>RECORDS {{ dashboardStats.summary?.total_records || 0 }}</span>
-            <span>SOURCES {{ dashboardStats.summary?.total_sources || 0 }}</span>
-            <span>CAT {{ dashboardStats.summary?.total_categories || 0 }}</span>
-          </div>
           <div class="expanded-chart-fill">
             <CategoryDonutChart
               :stats="dashboardStats"
@@ -453,6 +443,7 @@ const handleModalVisibleChange = (show) => {
   display: flex;
   flex-direction: column;
   position: relative;
+  padding-top: 0.15rem;
 }
 
 .chart-modal-card :deep(.chart-wrap) {
@@ -470,27 +461,7 @@ const handleModalVisibleChange = (show) => {
 .category-card {
   display: flex;
   flex-direction: column;
-}
-
-.summary-strip {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-  margin-bottom: 0.55rem;
-}
-
-.summary-strip span {
-  border: 1px solid rgba(0, 229, 255, 0.22);
-  background: rgba(0, 229, 255, 0.08);
-  color: #97d7ec;
-  font-family: var(--font-ui);
-  font-size: 0.57rem;
-  letter-spacing: 0.08em;
-  padding: 0.12rem 0.35rem;
-}
-
-.summary-strip--expanded {
-  margin-bottom: 0.75rem;
+  gap: 0.2rem;
 }
 
 @media (max-width: 1024px) {

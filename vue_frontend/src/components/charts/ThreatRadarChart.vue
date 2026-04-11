@@ -32,9 +32,8 @@ const props = defineProps({
   },
 })
 
-// --- 雷达图布局与等级逻辑 ---
 const getRadarLayout = (fullscreen) => {
-  if (fullscreen) return { center: ['50%', '50%'], radius: '77%' }
+  if (fullscreen) return { center: ['50%', '50%'], radius: '80%' }
   return { center: ['50%', '50%'], radius: '63%' }
 }
 
@@ -45,6 +44,23 @@ const rateLevel = (value, max) => {
   if (ratio >= 0.5) return { grade: 'B', color: RISK_COLORS.high }
   return { grade: 'C', color: RISK_COLORS.medium }
 }
+
+const TACTIC_ABBR = {
+  'Initial Access': 'INIT ACCESS',
+  Execution: 'EXEC',
+  Persistence: 'PRST',
+  'Privilege Escalation': 'PRIV ESC',
+  'Defense Evasion': 'EVASION',
+  'Credential Access': 'CRED ACCESS',
+  Discovery: 'DSCOV',
+  'Lateral Movement': 'LAT MOV',
+  Collection: 'COLL',
+  'Command and Control': 'C&C',
+  Exfiltration: 'EXFIL',
+  Impact: 'IMPACT',
+}
+
+const abbreviateTactic = (name) => TACTIC_ABBR[String(name)] || String(name).toUpperCase()
 
 const getThreatValues = () => {
   const radarTactics = props.stats?.radar_tactics || {}
@@ -113,12 +129,14 @@ const buildOption = () => {
   const { indicators, indicatorMax, totalValues, verifiedValues, verifiedDisplayValues } = getThreatValues()
   const maxVal = Math.max(...indicatorMax, 1)
   const { center: radarCenter, radius: radarRadius } = getRadarLayout(fullscreen)
-  
+
   const indicatorConfig = indicators.map((item, idx) => {
     const value = Number(totalValues[idx]) || 0
     const level = rateLevel(value, maxVal)
+    const gradeStyle = `grade${level.grade}`
+    const shortName = abbreviateTactic(item)
     return {
-      name: `{en|${item}}\n{grade|${level.grade}}`,
+      name: `{en|${shortName}} {${gradeStyle}|${level.grade}}`,
       max: Number(indicatorMax[idx]) || maxVal,
     }
   })
@@ -126,7 +144,7 @@ const buildOption = () => {
   return {
     backgroundColor: 'transparent',
     tooltip: createCyberTooltip({
-      size: 'lg',
+      className: 'cyber-tooltip category-tooltip',
       trigger: 'item',
       formatter: (params) => {
         if (!Array.isArray(params.value)) return ''
@@ -136,16 +154,24 @@ const buildOption = () => {
               ? Number(verifiedValues[idx]) || 0
               : Number(totalValues[idx]) || 0
             const tone = rateLevel(value, maxVal)
-            const displayName = params.seriesName === 'Verified Threats' ? `${item} · Verified` : item
-            return `<div class="cyber-tip-row"><span><i class="state-dot" style="background:${tone.color}"></i>${displayName}</span><strong>${value}</strong></div>`
+            const displayName = item
+            return `
+              <div class="cyber-tip-row">
+                <span style="color: #7ba7bc; display: inline-flex; align-items: center; gap: 6px;">
+                  <i class="state-dot" style="background:${tone.color}"></i>${displayName.toUpperCase()}: 
+                </span>
+                <strong style="color: #ffffff; font-family: 'Roboto Mono'; font-size: ${fullscreen ? '12px' : '12px'};">${value}</strong>
+              </div>`
           })
           .join('')
-        return [
-          '<div class="cyber-tip-body">',
-          `<div class="cyber-tip-head">${params.seriesName || 'THREAT PROFILE'}</div>`,
-          rows,
-          '</div>',
-        ].join('')
+        return `
+          <div class="cyber-tip-body">
+            <div class="cyber-tip-title" style="color: #8befff; font-family: 'Roboto Mono'; font-weight: 500; font-size: ${fullscreen ? '12px' : '12px'};">
+              ${params.seriesName || 'THREAT PROFILE'}
+            </div>
+            ${rows}
+          </div>
+        `
       },
     }),
     radar: {
@@ -155,11 +181,51 @@ const buildOption = () => {
       axisName: {
         color: '#eef5ff',
         fontFamily: 'Roboto Mono',
-        fontSize: fullscreen ? 13 : 11,
+        nameGap: fullscreen ? 22 : 8,
+        fontSize: fullscreen ? 12 : 12,
         fontWeight: 500,
         rich: {
-          en: { color: '#d9f6ff', fontSize: fullscreen ? 13 : 11, lineHeight: fullscreen ? 17 : 15, fontWeight: 500 },
-          grade: { color: RISK_COLORS.low, fontSize: fullscreen ? 12 : 10, lineHeight: fullscreen ? 16 : 14, fontWeight: 500 },
+          en: {
+            color: '#00e5ff',
+            fontSize: fullscreen ? 20 : 12,
+            lineHeight: fullscreen ? 18 : 16,
+            fontWeight: 500,
+            textShadowColor: 'rgba(0, 229, 255, 0.6)',
+            textShadowBlur: 2,
+          },
+          gradeA: {
+            color: '#ff5b75',
+            fontSize: fullscreen ? 24 : 14,
+            lineHeight: fullscreen ? 16 : 14,
+            fontWeight: 500,
+            fontFamily: 'Roboto Mono',
+            marginLeft: 4,
+            textShadowColor: 'rgba(255, 91, 117, 0.95)',
+            textShadowBlur: 2,
+            align: 'center',
+          },
+          gradeB: {
+            color: '#7fffc4',
+            fontSize: fullscreen ? 24 : 14,
+            lineHeight: fullscreen ? 16 : 14,
+            fontWeight: 500,
+            fontFamily: 'Roboto Mono',
+            marginLeft: 4,
+            textShadowColor: 'rgba(127, 255, 196, 0.9)',
+            textShadowBlur: 2,
+            align: 'center',
+          },
+          gradeC: {
+            color: '#8befff',
+            fontSize: fullscreen ? 24 : 14,
+            lineHeight: fullscreen ? 16 : 14,
+            fontWeight: 500,
+            fontFamily: 'Roboto Mono',
+            marginLeft: 4,
+            textShadowColor: 'rgba(139, 239, 255, 0.82)',
+            textShadowBlur: 2,
+            align: 'center',
+          },
         },
       },
       splitArea: {
@@ -240,7 +306,6 @@ const { chartRef } = useEcharts(buildOption, () => [props.stats, props.fullscree
   onClick: (params) => emit('chart-click', params)
 })
 
-// --- Canvas 粒子系统（亮绿色细节） ---
 const hexContainerRef = ref(null)
 const particleCanvasRef = ref(null)
 let animationFrameId = null
@@ -339,7 +404,6 @@ onBeforeUnmount(() => { if (animationFrameId) cancelAnimationFrame(animationFram
   height: calc(var(--scan-radius, 68) * 1cqmin);
   transform: translate(-50%, -50%);
   clip-path: var(--scan-clip);
-  /* 背景微弱的绿色呼吸光晕 */
   background: radial-gradient(circle, rgba(0, 255, 157, 0.1) 0%, rgba(0, 255, 157, 0.02) 48%, rgba(0, 255, 157, 0) 78%);
   box-shadow:
     inset 0 0 30px rgba(0, 255, 157, 0.18),
@@ -367,14 +431,12 @@ onBeforeUnmount(() => { if (animationFrameId) cancelAnimationFrame(animationFram
   animation: radar-ring-pulse 2.8s ease-in-out infinite;
 }
 
-/* 锐利的亮绿色雷达扫描线 */
 .radar-scan-hex::after {
   content: '';
   position: absolute;
   inset: 0;
   border-radius: 50%;
   z-index: 2;
-  /* Conic-gradient 调整为亮绿色调 */
   background: conic-gradient(
     from 0deg,
     transparent 0deg,

@@ -124,11 +124,6 @@
                     <MaximizeIcon v-else class="btn-icon" />
                   </button>
                 </template>
-                <div class="summary-strip">
-                  <span>RECORDS <strong class="ticker-value">{{ recordsTicker }}</strong></span>
-                  <span>SOURCES <strong class="ticker-value">{{ sourcesTicker }}</strong></span>
-                  <span>CAT <strong class="ticker-value">{{ categoriesTicker }}</strong></span>
-                </div>
                 <CategoryDonutChart
                   :key="`dashboard-category-${isPanelActive('category') ? 'fullscreen' : 'normal'}`"
                   :stats="dashboardStats"
@@ -206,11 +201,6 @@
             </div>
           </div>
           <div class="topology-modal-content" v-else>
-            <div class="summary-strip summary-strip--modal">
-              <span>RECORDS <strong class="ticker-value">{{ recordsTicker }}</strong></span>
-              <span>SOURCES <strong class="ticker-value">{{ sourcesTicker }}</strong></span>
-              <span>CAT <strong class="ticker-value">{{ categoriesTicker }}</strong></span>
-            </div>
             <div class="expanded-chart-fill">
               <ChartDrillGuidance
                 :banner-visible="isBannerVisible('category')"
@@ -236,7 +226,6 @@
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useTransition } from '@vueuse/core'
 import { NButton, NCard, NGi, NGrid, NModal } from 'naive-ui'
 import {
   ChevronDownIcon,
@@ -354,43 +343,6 @@ const handleCategoryChartClick = (params) => {
 const toggleChartFullscreen = (panelKey) => {
   togglePanel(panelKey)
 }
-
-const summaryTargets = {
-  records: ref(0),
-  sources: ref(0),
-  categories: ref(0),
-}
-
-const easeOutCubic = (n) => 1 - Math.pow(1 - n, 3)
-
-const recordsTransition = useTransition(summaryTargets.records, {
-  duration: 700,
-  transition: easeOutCubic,
-})
-
-const sourcesTransition = useTransition(summaryTargets.sources, {
-  duration: 700,
-  transition: easeOutCubic,
-})
-
-const categoriesTransition = useTransition(summaryTargets.categories, {
-  duration: 700,
-  transition: easeOutCubic,
-})
-
-const recordsTicker = computed(() => Math.round(recordsTransition.value))
-const sourcesTicker = computed(() => Math.round(sourcesTransition.value))
-const categoriesTicker = computed(() => Math.round(categoriesTransition.value))
-
-watch(
-  () => dashboardStats.value?.summary,
-  (summary) => {
-    summaryTargets.records.value = Number(summary?.total_records) || 0
-    summaryTargets.sources.value = Number(summary?.total_sources) || 0
-    summaryTargets.categories.value = Number(summary?.total_categories) || 0
-  },
-  { immediate: true },
-)
 
 const topologyScramble = useTextScramble((value) => {
   topologyTitle.value = value
@@ -594,18 +546,6 @@ const handleFullscreenModalChange = (show) => {
   height: 22px;
 }
 
-.chart-panel-host:fullscreen .summary-strip,
-.chart-panel-host:-webkit-full-screen .summary-strip {
-  gap: 0.28rem;
-  margin-bottom: 0.38rem;
-}
-
-.chart-panel-host:fullscreen .summary-strip span,
-.chart-panel-host:-webkit-full-screen .summary-strip span {
-  font-size: 0.5rem;
-  padding: 0.1rem 0.3rem;
-}
-
 .topology-modal-card :deep(.n-card-header) {
   min-height: 40px;
   padding: 0.4rem 0.85rem;
@@ -624,16 +564,6 @@ const handleFullscreenModalChange = (show) => {
   align-items: center;
 }
 
-.topology-modal-card .summary-strip {
-  gap: 0.28rem;
-  margin-bottom: 0.38rem;
-}
-
-.topology-modal-card .summary-strip span {
-  font-size: 0.5rem;
-  padding: 0.1rem 0.3rem;
-}
-
 .topology-modal-card :deep(.fui-icon-btn) {
   width: 22px;
   height: 22px;
@@ -649,35 +579,11 @@ const handleFullscreenModalChange = (show) => {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: 0.52rem 0.72rem 0.66rem;
+  padding: 0.58rem 0.72rem 0.66rem;
 }
 
 .chart-card :deep(.chart-canvas) {
-  min-height: 210px;
-}
-
-.summary-strip {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-  margin-bottom: 0.62rem;
-}
-
-.summary-strip span {
-  border: 1px solid rgba(0, 229, 255, 0.22);
-  background: rgba(0, 229, 255, 0.08);
-  color: #97d7ec;
-  font-family: var(--font-ui);
-  font-size: 0.57rem;
-  letter-spacing: 0.08em;
-  padding: 0.12rem 0.35rem;
-}
-
-.ticker-value {
-  margin-left: 0.18rem;
-  color: #ccf4ff;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
+  min-height: 244px;
 }
 
 .topology-collapsed-bar {

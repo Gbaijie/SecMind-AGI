@@ -18,7 +18,6 @@ export const createCyberTooltip = ({ size = 'md', ...overrides } = {}) => ({
     enterable: true,
     transitionDuration: 0.2,
     extraCssText: 'padding:0;box-shadow:none;background:transparent;',
-    // 核心修改：将 DOM 挂载到 body，突破所有外层 overflow: hidden 和 z-index 限制
     appendToBody: true,
     ...overrides,
 })

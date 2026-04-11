@@ -32,6 +32,45 @@ const orbitPhase = ref(0)
 let orbitTimer = null
 let orbitResumeTimer = null
 
+const COMMON_TERM_MAP = [
+  ['Threat Intelligence', 'THREAT INTEL'],
+  ['Threat', 'THRT'],
+  ['Intelligence', 'INTEL'],
+  ['Indicator of Compromise', 'IOC'],
+  ['Indicator', 'IND'],
+  ['Compromise', 'COMP'],
+  ['Vulnerability', 'VULN'],
+  ['Malware', 'MAL'],
+  ['Attack', 'ATK'],
+  ['Detection', 'DETECT'],
+  ['Analysis', 'ANL'],
+  ['Behavior', 'BEHAV'],
+  ['Category', 'CAT'],
+  ['Source', 'SRC'],
+  ['Rule', 'RULE'],
+  ['Case', 'CASE'],
+  ['Confidence', 'CONF'],
+  ['Top', 'TOP'],
+]
+
+const toTechLabel = (value, maxLen = 16) => {
+  const text = String(value || '').trim()
+  if (!text) return 'N/A'
+
+  let normalized = text
+  COMMON_TERM_MAP.forEach(([from, to]) => {
+    normalized = normalized.replace(new RegExp(from, 'gi'), to)
+  })
+
+  normalized = normalized
+    .replace(/[_/]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toUpperCase()
+
+  return normalized.length > maxLen ? `${normalized.slice(0, maxLen)}…` : normalized
+}
+
 const abbreviate = (name) => {
   const text = String(name || '').trim()
   if (!text) return 'N/A'
@@ -97,7 +136,8 @@ const buildOption = () => {
     const color = colorPool[idx % colorPool.length]
     return {
       value,
-      name: item.name,
+      name: toTechLabel(item.name, 18),
+      rawName: item.name,
       confidence: Number(item.avg_confidence) || 0,
       itemStyle: {
         color,
@@ -108,7 +148,7 @@ const buildOption = () => {
       },
       label: {
         formatter: (params) => {
-          const labelAbbr = abbreviate(params.name)
+          const labelAbbr = abbreviate(params.data?.rawName || params.name)
           return `{abbr|[${labelAbbr}]}  {val|${params.value}}`
         },
       },
@@ -131,8 +171,9 @@ const buildOption = () => {
     ;(category.top_tags || []).slice(0, 3).forEach((tagItem) => {
       tagSeries.push({
         value: Number(tagItem.value) || 0,
-        name: `${abbreviate(category.name)} · ${tagItem.name}`,
+        name: `${abbreviate(category.name)} · ${toTechLabel(tagItem.name, 14)}`,
         parent: category.name,
+        rawTagName: tagItem.name,
         confidence: Number(tagItem.avg_confidence) || Number(category.avg_confidence) || 0,
         itemStyle: {
           color: echarts.color.lift(parentColor, 0.18),
@@ -162,11 +203,11 @@ const buildOption = () => {
     textStyle: {
       color: '#c8d8e6',
       fontFamily: 'Roboto Mono',
-      fontSize: fullscreen ? 11 : 10,
-      lineHeight: fullscreen ? 16 : 14,
+      fontSize: fullscreen ? 16 : 10,
+      lineHeight: fullscreen ? 20 : 14,
       verticalAlign: 'middle',
-      width: fullscreen ? 140 : 'auto',
-      overflow: 'truncate'
+      width: fullscreen ? 190 : 'auto',
+      overflow: fullscreen ? 'break' : 'truncate'
     },
     itemWidth: fullscreen ? 10 : 8,
     itemHeight: fullscreen ? 10 : 8,
@@ -178,17 +219,17 @@ const buildOption = () => {
         {
           ...sharedLegendConfig,
           orient: 'vertical',
-          left: '2%',
+          left: '5%',
           top: 'middle',
-          height: '75%',
+          height: '82%',
           data: leftLegend,
         },
         {
           ...sharedLegendConfig,
           orient: 'vertical',
-          right: '2%',
+          right: '3%',
           top: 'middle',
-          height: '75%',
+          height: '82%',
           data: rightLegend,
         },
       ]
@@ -217,12 +258,12 @@ const buildOption = () => {
           const conf = params.data?.confidence || 0
           return `
             <div class="cyber-tip-body">
-              <div class="cyber-tip-title" style="color: #8befff; font-family: 'Roboto Mono'; font-weight: 700; font-size: ${fullscreen ? '12px' : '11px'};">
-                ${params.name}
+              <div class="cyber-tip-title" style="color: #8befff; font-family: 'Roboto Mono'; font-weight: 500; font-size: ${fullscreen ? '12px' : '11px'};">
+                ${toTechLabel(params.name, 22)}
               </div>
               <div class="cyber-tip-row">
-                <span style="color: #7ba7bc;">TAG VALUE: </span>
-                <strong style="color: #ffffff; font-family: 'Roboto Mono'; font-size: ${fullscreen ? '12px' : '11px'};">${params.value}</strong>
+                <span style="color: #7ba7bc;">TAG VAL: </span>
+                <strong style="color: #ffffff; font-family: 'Roboto Mono'; font-size: ${fullscreen ? '12px' : '12px'};">${params.value}</strong>
               </div>
               <div class="cyber-tip-row">
                 <span style="color: #7ba7bc;">CONF: </span>
@@ -235,22 +276,23 @@ const buildOption = () => {
         
         const conf = params.data?.confidence || 0;
         const percent = (params.percent || 0).toFixed(1);
+        const rawName = params.data?.rawName || params.name;
         
         return `
           <div class="cyber-tip-body">
-            <div class="cyber-tip-title" style="color: #8befff; font-family: 'Roboto Mono'; font-weight: 700; font-size: ${fullscreen ? '12px' : '11px'};">
-              ${params.name}
+            <div class="cyber-tip-title" style="color: #8befff; font-family: 'Roboto Mono'; font-weight: 500; font-size: ${fullscreen ? '12px' : '12px'};">
+              ${toTechLabel(rawName, 22)}
             </div>
             <div class="cyber-tip-row">
-              <span style="color: #7ba7bc;">COUNT: </span> 
-              <strong style="color: #ffffff; font-family: 'Roboto Mono'; font-size: ${fullscreen ? '12px' : '11px'};">${params.value}</strong>
+              <span style="color: #7ba7bc;">CNT: </span> 
+              <strong style="color: #ffffff; font-family: 'Roboto Mono'; font-size: ${fullscreen ? '12px' : '12px'};">${params.value}</strong>
             </div>
             <div class="cyber-tip-row">
-              <span style="color: #7ba7bc;">SHARE: </span> 
+              <span style="color: #7ba7bc;">SHR: </span> 
               <strong style="color: #7fffc4; font-family: 'Roboto Mono'; font-size: ${fullscreen ? '11px' : '10px'};">${percent}%</strong>
             </div>
             <div class="cyber-tip-row">
-              <span style="color: #7ba7bc;">CONF:  </span> 
+              <span style="color: #7ba7bc;">CONF: </span> 
               <strong style="color: #7fffc4; font-family: 'Roboto Mono'; font-size: ${fullscreen ? '11px' : '10px'};">${conf.toFixed(1)}%</strong>
             </div>
           </div>
@@ -269,8 +311,8 @@ const buildOption = () => {
         textStyle: {
           color: '#eaf7ff',
           fontFamily: 'Roboto Mono',
-          fontSize: fullscreen ? 24 : 20,
-          fontWeight: 700,
+          fontSize: fullscreen ? 30 : 20,
+          fontWeight: 500,
           textShadowColor: 'rgba(0,229,255,0.55)',
           textShadowBlur: 14,
         },
@@ -284,7 +326,7 @@ const buildOption = () => {
         textStyle: {
           color: 'rgba(173,225,245,0.78)',
           fontFamily: 'Roboto Mono',
-          fontSize: fullscreen ? 10 : 9,
+          fontSize: fullscreen ? 16 : 10,
           letterSpacing: 2,
         },
       },
@@ -348,21 +390,23 @@ const buildOption = () => {
         label: {
           show: true,
           alignTo: 'labelLine',
-          distanceToLabelLine: 5,
+          distanceToLabelLine: fullscreen ? 20 : 5,
           color: '#d7edf8',
           fontFamily: 'Roboto Mono',
           fontSize: fullscreen ? 11 : 10,
-          lineHeight: fullscreen ? 16 : 15,
+          lineHeight: fullscreen ? 20 : 18, 
           rich: {
             abbr: {
               color: '#7eeeff',
-              fontWeight: 600,
-              fontSize: fullscreen ? 10 : 9,
+              fontWeight: 500,
+              fontSize: fullscreen ? 20 : 12,
+              letterSpacing: 1,
             },
             val: {
               color: '#f4fbff',
-              fontWeight: 700,
-              fontSize: fullscreen ? 12 : 11,
+              fontWeight: 500,
+              fontSize: fullscreen ? 20 : 12,
+              padding: [0, 0, 0, 2],
             },
           },
         },
@@ -406,7 +450,8 @@ const buildOption = () => {
           label: {
             color: '#fff',
             fontSize: fullscreen ? 8 : 9,
-            formatter: 'ALERT',
+            fontFamily: 'Roboto Mono',
+            formatter: 'ALRT',
           },
           data: total ? [{ type: 'max', name: 'Peak' }] : [],
         },

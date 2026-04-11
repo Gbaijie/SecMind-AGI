@@ -161,7 +161,6 @@ const buildOption = () => {
     }
   })
 
-  // 构造阈值警戒线数据
   const warningLineData = warningLine && fullscreen ? [{
     name: `THRESH ${warningLine}`,
     yAxis: warningLine,
@@ -176,14 +175,14 @@ const buildOption = () => {
     backgroundColor: 'transparent',
     grid: [
       {
-        left: fullscreen ? 66 : 54,
-        right: fullscreen ? 34 : 24,
+        left: fullscreen ? 120 : 90,
+        right: fullscreen ? 60 : 50,
         top: fullscreen ? 30 : 26,
         height: zoomEnabled ? (fullscreen ? '31%' : '29%') : (fullscreen ? '33%' : '31%'),
       },
       {
-        left: fullscreen ? 66 : 54,
-        right: fullscreen ? 34 : 24,
+        left: fullscreen ? 120 : 90,
+        right: fullscreen ? 60 : 50,
         top: zoomEnabled ? (fullscreen ? '43%' : '45%') : (fullscreen ? '45%' : '47%'),
         bottom: zoomEnabled ? (fullscreen ? 48 : 46) : (fullscreen ? 32 : 30),
       },
@@ -232,7 +231,7 @@ const buildOption = () => {
         ]
       : [],
     tooltip: createCyberTooltip({
-      size: 'md',
+      className: 'cyber-tooltip category-tooltip',
       trigger: 'axis',
       axisPointer: {
         lineStyle: {
@@ -248,15 +247,23 @@ const buildOption = () => {
             const value = Number(item.value) || 0
             const maxRef = item.seriesName === 'Ingest Timeline' ? lineMax : stackedMax
             const tone = getStatusTone(value, maxRef)
-            return `<div class="cyber-tip-row"><span><i class="state-dot" style="background:${tone.color}"></i>${item.seriesName}</span><strong>${value}</strong></div>`
+            return `
+              <div class="cyber-tip-row">
+                <span style="color: #7ba7bc; display: inline-flex; align-items: center; gap: 6px;">
+                  <i class="state-dot" style="background:${tone.color}"></i>${item.seriesName.toUpperCase()}: 
+                </span>
+                <strong style="color: #ffffff; font-family: 'Roboto Mono'; font-size: ${fullscreen ? '12px' : '12px'};">${value}</strong>
+              </div>`
           })
           .join('')
-        return [
-          '<div class="cyber-tip-body">',
-          `<div class="cyber-tip-head">${axisLabel}</div>`,
-          rows,
-          '</div>',
-        ].join('')
+        return `
+          <div class="cyber-tip-body">
+            <div class="cyber-tip-title" style="color: #8befff; font-family: 'Roboto Mono'; font-weight: 500; font-size: ${fullscreen ? '12px' : '12px'};">
+              ${axisLabel}
+            </div>
+            ${rows}
+          </div>
+        `
       },
     }),
     xAxis: [
@@ -369,9 +376,8 @@ const buildOption = () => {
         type: 'custom',
         xAxisIndex: 1,
         yAxisIndex: 1,
-        z: 1, // 放在底纹和实际线条之间
+        z: 1, 
         silent: true,
-        // 只需触发一次 renderItem 即可绘制完整的全图扫描
         data: timelineValues.length ? [0] : [], 
         renderItem: (params, api) => {
           if (!fullscreen) return
@@ -380,7 +386,6 @@ const buildOption = () => {
           if (len < 2) return
 
           const points = []
-          // 遍历数据并利用 api.coord 转换为像素坐标，重构出 step: 'middle' 的多边形路径
           for (let i = 0; i < len; i++) {
             const pt = api.coord([i, timelineValues[i]])
             if (i > 0) {
@@ -391,15 +396,14 @@ const buildOption = () => {
             points.push(pt)
           }
 
-          // 闭合底部多边形
           const firstPt = api.coord([0, timelineValues[0]])
           const lastPt = api.coord([len - 1, timelineValues[len - 1]])
-          const bottomY = api.coord([0, 0])[1] // Y 轴为 0 时的像素高度
+          const bottomY = api.coord([0, 0])[1] 
 
           points.push([lastPt[0], bottomY], [firstPt[0], bottomY])
 
           const gridWidth = lastPt[0] - firstPt[0]
-          const beamWidth = gridWidth * 0.18 // 光束宽度占可视区的 18%
+          const beamWidth = gridWidth * 0.18 
 
           return {
             type: 'group',
@@ -408,7 +412,6 @@ const buildOption = () => {
               shape: { points }
             },
             children: [
-              // 光束渐变主体
               {
                 type: 'rect',
                 shape: { x: firstPt[0] - beamWidth, y: 0, width: beamWidth, height: bottomY },
@@ -429,7 +432,6 @@ const buildOption = () => {
                   ]
                 }
               },
-              // 光束前侧的高亮引导线
               {
                 type: 'rect',
                 shape: { x: firstPt[0] - 2, y: 0, width: 2, height: bottomY },
@@ -544,17 +546,29 @@ const buildOption = () => {
         },
         z: 4,
         tooltip: {
+          className: 'cyber-tooltip category-tooltip',
           formatter: (params) => {
             const tone = getStatusTone(Number(params.value?.[1]) || 0, lineMax)
             const dominantFeature = params.data?.dominantFeature || '未命中归因特征'
-            return [
-              '<div class="cyber-tip-body">',
-              `<div class="cyber-tip-head"><span class="state-dot" style="background:${tone.color}"></span>${tone.label}</div>`,
-              `<div class="cyber-tip-row"><span>Point</span><strong>${params.value?.[0] || '-'}</strong></div>`,
-              `<div class="cyber-tip-row"><span>Flow</span><strong>${params.value?.[1] || 0}</strong></div>`,
-              `<div class="cyber-tip-row"><span>Cause</span><strong>${shortText(dominantFeature, 24)}</strong></div>`,
-              '</div>',
-            ].join('')
+            return `
+              <div class="cyber-tip-body">
+                <div class="cyber-tip-title" style="color: #8befff; font-family: 'Roboto Mono'; font-weight: 500; font-size: ${fullscreen ? '12px' : '12px'}; display: flex; align-items: center; gap: 6px;">
+                  <span class="state-dot" style="background:${tone.color}"></span>${tone.label}
+                </div>
+                <div class="cyber-tip-row">
+                  <span style="color: #7ba7bc;">POINT: </span>
+                  <strong style="color: #ffffff; font-family: 'Roboto Mono'; font-size: ${fullscreen ? '12px' : '12px'};">${params.value?.[0] || '-'}</strong>
+                </div>
+                <div class="cyber-tip-row">
+                  <span style="color: #7ba7bc;">FLOW: </span>
+                  <strong style="color: #ffffff; font-family: 'Roboto Mono'; font-size: ${fullscreen ? '12px' : '12px'};">${params.value?.[1] || 0}</strong>
+                </div>
+                <div class="cyber-tip-row">
+                  <span style="color: #7ba7bc;">CAUSE: </span>
+                  <strong style="color: #7fffc4; font-family: 'Roboto Mono'; font-size: ${fullscreen ? '11px' : '10px'};">${shortText(dominantFeature, 24)}</strong>
+                </div>
+              </div>
+            `
           },
         },
         data: peakScatterData,
@@ -604,7 +618,6 @@ onMounted(() => {
   height: 100%;
   min-height: 205px;
 }
-
 
 @media (max-height: 860px) {
   .chart-canvas {

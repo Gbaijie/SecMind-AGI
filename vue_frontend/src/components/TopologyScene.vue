@@ -1,9 +1,3 @@
-<!--
-  组件职责：渲染攻击拓扑 3D 场景并提供搜索、聚焦和旋转控制。
-  业务模块：可视化拓扑模块
-  主要数据流：topology 数据 -> DataAdapter -> TopologyRenderer / TopologyInteraction -> WebGL 画面
--->
-
 <template>
   <div ref="mountRef" class="topology-scene">
     <div class="topology-toolbar">
@@ -22,16 +16,12 @@
         <button class="toolbar-button" type="button" :class="{ active: autoRotateEnabled }" @click="toggleAutoRotate">
           {{ autoRotateEnabled ? 'ROTATE ON' : 'ROTATE OFF' }}
         </button>
-        <button class="toolbar-button" type="button" :disabled="!hasActiveSelection" @click="handlePinToggle">
-          {{ pinButtonLabel }}
-        </button>
         <button class="toolbar-button" type="button" @click="handleReset">RESET VIEW</button>
       </div>
     </div>
 
-    <!-- 风险等级筛选条 -->
     <div class="topology-filter-bar">
-      <span class="filter-label">FILTER:</span>
+      <span class="filter-label">RISK FILTER:</span>
       <button
         v-for="f in riskFilters"
         :key="f.key"
@@ -70,10 +60,27 @@
 
     <div class="topology-status">
       <span class="status-chip">{{ statusText }}</span>
+      <span v-if="currentFocusLabel" class="status-focus">FOCUS {{ currentFocusLabel }}</span>
       <span class="status-summary">{{ summaryText }}</span>
     </div>
 
-    <div class="topology-legend">
+    <div class="topology-legend topology-legend--left">
+      <div class="legend-block legend-block--compact">
+        <div class="legend-title">LINK SEVERITY</div>
+        <div v-for="item in linkLegendItems" :key="item.key" class="legend-item legend-item--line">
+          <span class="legend-line" :style="{ backgroundColor: item.color, opacity: item.opacity }"></span>
+          <span class="legend-label">{{ item.label }}</span>
+        </div>
+        <div class="legend-range">Weight {{ legendStats.minWeight }} - {{ legendStats.maxWeight }}</div>
+        <div class="legend-note legend-note--meta">
+          Nodes {{ legendStats.renderedNodes }}/{{ legendStats.totalNodes }}
+          <span class="legend-divider">|</span>
+          Links {{ legendStats.renderedLinks }}/{{ legendStats.totalLinks }}
+        </div>
+      </div>
+    </div>
+
+    <div class="topology-legend topology-legend--right">
       <div class="legend-block">
         <div class="legend-title">NODE TYPES</div>
         <div v-for="item in nodeLegendItems" :key="item.key" class="legend-item">
@@ -86,20 +93,6 @@
         <div v-for="item in riskLegendItems" :key="item.key" class="legend-item">
           <span class="legend-dot legend-dot--risk" :style="{ backgroundColor: item.color, boxShadow: `0 0 7px ${item.color}` }"></span>
           <span class="legend-label">{{ item.label }}</span>
-        </div>
-      </div>
-
-      <div class="legend-block">
-        <div class="legend-title">LINK SEVERITY</div>
-        <div v-for="item in linkLegendItems" :key="item.key" class="legend-item legend-item--line">
-          <span class="legend-line" :style="{ backgroundColor: item.color, opacity: item.opacity }"></span>
-          <span class="legend-label">{{ item.label }}</span>
-        </div>
-        <div class="legend-range">Weight {{ legendStats.minWeight }} - {{ legendStats.maxWeight }}</div>
-        <div class="legend-note legend-note--meta">
-          Nodes {{ legendStats.renderedNodes }}/{{ legendStats.totalNodes }}
-          <span class="legend-divider">|</span>
-          Links {{ legendStats.renderedLinks }}/{{ legendStats.totalLinks }}
         </div>
       </div>
     </div>
@@ -127,8 +120,7 @@ const props = defineProps({
 const mountRef = ref(null)
 const searchKeyword = ref('')
 const autoRotateEnabled = ref(true)
-const statusText = ref('AUTO ROTATE ON')
-const activeNodeId = ref('')
+const statusText = ref('READY')
 const focusedNodeId = ref('')
 const pinnedNodeId = ref('')
 const nodeLegendItems = NODE_LEGEND_ITEMS
@@ -168,14 +160,17 @@ const riskLegendItems = [
   { key: 'low',      label: 'LOW / INFO', color: RISK_COLORS.low },
 ]
 const summaryText = computed(() => getTopologySummaryText(topologyModel.value))
-const hasActiveSelection = computed(() => Boolean(activeNodeId.value || focusedNodeId.value || pinnedNodeId.value))
-const pinButtonLabel = computed(() => (pinnedNodeId.value ? 'UNPIN NODE' : 'PIN NODE'))
 const tooltipEnergy = computed(() => {
   const level = String(tooltip.value.riskLevel || 'low').toLowerCase()
   if (level === 'critical') return 100
   if (level === 'high') return 82
   if (level === 'medium') return 62
   return 38
+})
+const currentFocusLabel = computed(() => {
+  const value = pinnedNodeId.value || focusedNodeId.value || ''
+  if (!value) return ''
+  return value.length > 34 ? `${value.slice(0, 31)}...` : value
 })
 
 let topologyEngine = null
@@ -197,7 +192,6 @@ const handleNodeStateChange = (payload) => {
       nodeId: '', pinnedNodeId: '', focusedNodeId: '', hoveredNodeId: '',
     })
     triggerRef(tooltip)
-    activeNodeId.value = ''
     focusedNodeId.value = ''
     pinnedNodeId.value = ''
     return
@@ -220,7 +214,6 @@ const handleNodeStateChange = (payload) => {
     hoveredNodeId:  payload.hoveredNodeId  || '',
   })
   triggerRef(tooltip)
-  activeNodeId.value  = payload.nodeId        || ''
   focusedNodeId.value = payload.focusedNodeId || ''
   pinnedNodeId.value  = payload.pinnedNodeId  || ''
 }
@@ -239,7 +232,6 @@ const handleAutoRotateChange = (enabled) => {
   autoRotateEnabled.value = Boolean(enabled)
 }
 
-// ── 风险等级过滤 ──────────────────────────────────
 const setRiskFilter = (key) => {
   activeRiskFilter.value = key
   if (!topologyEngine) return
@@ -275,11 +267,6 @@ const toggleAutoRotate = () => {
   handleStatusChange(autoRotateEnabled.value ? 'AUTO ROTATE ON' : 'AUTO ROTATE OFF')
 }
 
-const handlePinToggle = () => {
-  if (!topologyEngine || !hasActiveSelection.value) return
-  topologyEngine.togglePin(pinnedNodeId.value || activeNodeId.value)
-}
-
 const handleReset = () => {
   searchKeyword.value = ''
   if (topologyEngine) {
@@ -303,13 +290,7 @@ onMounted(() => {
   topologyEngine.setTopologyModel(topologyModel.value)
 })
 
-watch(
-  () => props.topology,
-  () => {
-    syncTopologyModel()
-  },
-  { deep: false }
-)
+watch(() => props.topology, syncTopologyModel, { deep: false })
 
 watch(autoRotateEnabled, (enabled) => {
   if (topologyEngine) {
@@ -329,31 +310,46 @@ onBeforeUnmount(() => {
 .topology-scene {
   width: 100%;
   height: 100%;
-  min-height: 230px;
+  min-height: 260px;
   position: relative;
   overflow: hidden;
+  isolation: isolate;
+  --panel-bg: linear-gradient(145deg, rgba(10, 23, 43, 0.95), rgba(4, 11, 24, 0.95));
+  --panel-bg-weak: linear-gradient(145deg, rgba(13, 31, 56, 0.9), rgba(5, 14, 29, 0.9));
+  --panel-border: rgba(101, 186, 229, 0.35);
+  --panel-border-strong: rgba(0, 229, 255, 0.58);
+  --panel-text-main: #d9f3ff;
+  --panel-text-muted: #85aec4;
+  --panel-shadow: 0 6px 20px rgba(0, 0, 0, 0.28);
   background:
-    radial-gradient(circle at 50% 45%, rgba(0, 209, 255, 0.13), transparent 56%),
-    radial-gradient(circle at 15% 15%, rgba(106, 168, 255, 0.12), transparent 45%),
-    linear-gradient(180deg, rgba(5, 8, 20, 0.98), rgba(6, 16, 34, 0.92));
+    radial-gradient(circle at 16% 14%, rgba(40, 102, 182, 0.22), transparent 42%),
+    radial-gradient(circle at 74% 58%, rgba(0, 160, 236, 0.18), transparent 44%),
+    linear-gradient(180deg, #040914 0%, #051326 56%, #06182f 100%);
 }
 
-.topology-scene::before {
+.topology-scene::before,
+.topology-scene::after {
   content: '';
   position: absolute;
   inset: 0;
-  pointer-events: none;
-  background:
-    radial-gradient(circle at 78% 20%, rgba(143, 196, 255, 0.08), transparent 38%),
-    repeating-linear-gradient(
-      115deg,
-      rgba(128, 194, 255, 0.04) 0,
-      rgba(128, 194, 255, 0.04) 1px,
-      transparent 1px,
-      transparent 16px
-    );
-  mix-blend-mode: screen;
   z-index: 0;
+  pointer-events: none;
+}
+
+.topology-scene::before {
+  background:
+    linear-gradient(180deg, rgba(5, 18, 36, 0), rgba(5, 18, 36, 0.62)),
+    repeating-linear-gradient(
+      116deg,
+      rgba(125, 197, 255, 0.055) 0,
+      rgba(125, 197, 255, 0.055) 1px,
+      transparent 1px,
+      transparent 17px
+    );
+}
+
+.topology-scene::after {
+  background: radial-gradient(circle at 82% 24%, rgba(88, 170, 255, 0.18), transparent 36%);
 }
 
 .topology-scene :deep(canvas) {
@@ -364,52 +360,158 @@ onBeforeUnmount(() => {
   inset: 0;
 }
 
-/* ── 风险筛选条 ─────────────────────────────────── */
+.topology-toolbar {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  top: 16px;
+  z-index: 11;
+  display: flex;
+  flex-wrap: nowrap; /* 强制不换行，保持设计图中的同行布局 */
+  gap: 12px;
+  pointer-events: none;
+}
+
+.toolbar-search,
+.toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+  z-index: 1;
+  pointer-events: auto;
+  animation: panel-slide-in 620ms cubic-bezier(0.18, 0.8, 0.22, 1) both;
+}
+
+.toolbar-search {
+  flex: 1; /* 搜索框区域占满剩余空间 */
+  min-width: 280px;
+}
+
+.toolbar-input {
+  flex: 1;
+  height: 36px;
+  padding: 0 14px 0 18px;
+  border: 1px solid rgba(94, 177, 219, 0.28);
+  background: linear-gradient(145deg, rgba(19, 43, 71, 0.9), rgba(9, 21, 39, 0.92));
+  color: var(--panel-text-main);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  outline: none;
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+  box-shadow: inset 0 0 0 1px rgba(162, 229, 255, 0.06);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.toolbar-input::placeholder {
+  color: #9db9cb;
+}
+
+.toolbar-input:focus {
+  border-color: rgba(0, 229, 255, 0.62);
+  box-shadow: inset 0 0 0 1px rgba(176, 233, 255, 0.14);
+}
+
+.toolbar-actions {
+  flex: 0 0 auto;
+}
+
+.toolbar-button {
+  height: 36px;
+  min-width: 118px;
+  padding: 0 16px;
+  border: 1px solid rgba(0, 229, 255, 0.42);
+  background: linear-gradient(135deg, rgba(17, 55, 81, 0.92), rgba(7, 25, 49, 0.94));
+  color: #e3f5ff;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.11em;
+  white-space: nowrap;
+  clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+  box-shadow: inset 0 0 0 1px rgba(167, 231, 255, 0.08);
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, color 0.18s ease;
+  cursor: pointer;
+}
+
+.toolbar-button:hover:not(:disabled) {
+  border-color: rgba(0, 229, 255, 0.82);
+  color: #ffffff;
+  box-shadow: 0 0 10px rgba(0, 229, 255, 0.18), inset 0 0 0 1px rgba(162, 229, 255, 0.15);
+  transform: translateY(-1px);
+}
+
+.toolbar-button:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.toolbar-button.active {
+  border-color: rgba(0, 255, 157, 0.82);
+  background: linear-gradient(135deg, rgba(0, 255, 178, 0.24), rgba(9, 35, 58, 0.94));
+  color: #dcffef;
+  box-shadow: 0 0 11px rgba(0, 255, 157, 0.16);
+}
+
+.toolbar-button:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.toolbar-button--primary {
+  border-color: rgba(0, 229, 255, 0.68);
+  color: #f0fdff;
+  background: linear-gradient(135deg, rgba(0, 216, 255, 0.22), rgba(8, 31, 57, 0.96));
+}
+
 .topology-filter-bar {
   position: absolute;
-  left: 10px;
-  top: 52px;
+  left: 16px;
+  top: 64px; /* 紧贴工具栏下方 */
   z-index: 11;
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
   pointer-events: auto;
-  animation: panel-slide-in 540ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation: panel-slide-in 650ms cubic-bezier(0.18, 0.8, 0.22, 1) both;
 }
 
 .filter-label {
-  color: rgba(198, 230, 243, 0.92);
+  color: #c5e3f1;
   font-family: var(--font-ui);
   font-size: 12px;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
   margin-right: 4px;
 }
 
 .filter-chip {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  min-height: 30px;
-  padding: 0 12px;
-  border: 1px solid rgba(0, 229, 255, 0.4);
-  background: linear-gradient(125deg, rgba(202, 231, 255, 0.1), rgba(14, 39, 73, 0.56));
-  color: rgba(214, 240, 252, 0.95);
+  gap: 8px;
+  min-height: 32px;
+  padding: 0 14px;
+  border: 1px solid rgba(100, 178, 216, 0.34);
+  background: var(--panel-bg-weak);
+  color: #d8f1ff;
   font-family: var(--font-ui);
   font-size: 12px;
   font-weight: 700;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   line-height: 1;
   cursor: pointer;
-  border-radius: 999px;
-  transition: all 0.22s ease;
-  backdrop-filter: blur(7px) saturate(118%);
+  clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+  transition: border-color 0.2s ease, color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .filter-chip:hover {
-  border-color: rgba(0, 229, 255, 0.45);
-  color: #d8f5ff;
+  border-color: rgba(0, 229, 255, 0.62);
+  color: #f5fdff;
+}
+
+.filter-chip:active {
+  transform: translateY(1px);
 }
 
 .filter-chip-dot {
@@ -421,189 +523,52 @@ onBeforeUnmount(() => {
 
 .filter-chip--active.filter-chip--all {
   border-color: rgba(127, 168, 182, 0.7);
-  background: rgba(127, 168, 182, 0.1);
   color: #d8f5ff;
-  box-shadow: 0 0 8px rgba(127, 168, 182, 0.2);
+  box-shadow: 0 0 9px rgba(127, 168, 182, 0.2);
 }
+
 .filter-chip--active.filter-chip--critical {
-  border-color: rgba(255, 23, 68, 0.7);
-  background: rgba(255, 23, 68, 0.12);
-  color: #ff9db0;
+  border-color: rgba(255, 23, 68, 0.74);
+  color: #ffadbe;
   box-shadow: 0 0 10px rgba(255, 23, 68, 0.28);
 }
+
 .filter-chip--active.filter-chip--high {
-  border-color: rgba(255, 87, 34, 0.7);
-  background: rgba(255, 87, 34, 0.12);
-  color: #ffbf9f;
-  box-shadow: 0 0 10px rgba(255, 87, 34, 0.28);
+  border-color: rgba(255, 87, 34, 0.74);
+  color: #ffcbad;
+  box-shadow: 0 0 10px rgba(255, 87, 34, 0.24);
 }
+
 .filter-chip--active.filter-chip--medium {
-  border-color: rgba(255, 193, 7, 0.78);
-  background: rgba(255, 193, 7, 0.12);
-  color: #ffe08f;
-  box-shadow: 0 0 10px rgba(255, 193, 7, 0.25);
+  border-color: rgba(255, 193, 7, 0.8);
+  color: #ffe7a8;
+  box-shadow: 0 0 10px rgba(255, 193, 7, 0.24);
 }
+
 .filter-chip--active.filter-chip--low {
-  border-color: rgba(69, 90, 100, 0.8);
-  background: rgba(69, 90, 100, 0.22);
-  color: #b7c5cc;
-  box-shadow: 0 0 8px rgba(69, 90, 100, 0.26);
-}
-
-.topology-toolbar {
-  position: absolute;
-  left: 10px;
-  right: 10px;
-  top: 10px;
-  z-index: 11;
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 8px;
-  pointer-events: none;
-}
-
-.topology-toolbar::before {
-  content: '';
-  position: absolute;
-  inset: -4px -2px -4px -2px;
-  border-radius: 10px;
-  border: 1px solid rgba(116, 205, 255, 0.16);
-  background: linear-gradient(135deg, rgba(6, 18, 36, 0.7), rgba(6, 16, 32, 0.34));
-  backdrop-filter: blur(10px) saturate(122%);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18), inset 0 0 0 1px rgba(162, 229, 255, 0.06);
-  pointer-events: none;
-}
-
-.toolbar-search,
-.toolbar-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  pointer-events: auto;
-  flex-wrap: wrap;
-  animation: panel-slide-in 620ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
-  position: relative;
-  z-index: 1;
-}
-
-.toolbar-search {
-  flex: 1 1 320px;
-  min-width: 260px;
-  padding: 3px;
-  border: 1px solid var(--toolbar-border, rgba(0, 255, 255, 0.5));
-  background: var(--toolbar-surface, linear-gradient(135deg, rgba(22, 42, 70, 0.92), rgba(8, 19, 38, 0.92)));
-  box-shadow: inset 0 0 0 1px rgba(176, 230, 255, 0.06);
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
-}
-
-.toolbar-search:focus-within {
-  border-color: var(--toolbar-focus-border, rgba(0, 255, 255, 0.85));
-  box-shadow: 0 0 0 2px rgba(0, 255, 255, 0.18), inset 0 0 0 1px rgba(176, 230, 255, 0.1);
-}
-
-.toolbar-input {
-  flex: 1 1 220px;
-  min-width: 180px;
-  height: 30px;
-  border: 1px solid rgba(0, 255, 255, 0.2);
-  background: linear-gradient(135deg, rgba(25, 46, 74, 0.9), rgba(12, 24, 43, 0.9));
-  color: #d8f5ff;
-  padding: 0 10px;
-  font-family: var(--font-ui);
-  font-size: 0.74rem;
-  letter-spacing: 0.04em;
-  outline: none;
-  box-shadow: inset 0 0 0 1px rgba(160, 228, 255, 0.08);
-  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease, background 0.18s ease;
-}
-
-.toolbar-input::placeholder {
-  color: var(--toolbar-placeholder, #b9d6ea);
-}
-
-.toolbar-input:focus {
-  border-color: var(--toolbar-focus-border, rgba(0, 255, 255, 0.85));
-  box-shadow: inset 0 0 0 1px rgba(175, 235, 255, 0.14);
-}
-
-.toolbar-button {
-  height: 30px;
-  min-width: 102px;
-  padding: 0 12px;
-  border: 1px solid rgba(0, 255, 255, 0.46);
-  background: linear-gradient(130deg, rgba(20, 64, 88, 0.86), rgba(5, 28, 58, 0.84));
-  color: #e0f4ff;
-  font-family: var(--font-ui);
-  font-size: 0.7rem;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  white-space: nowrap;
-  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, color 0.18s ease, background 0.18s ease;
-  box-shadow: inset 0 0 0 1px rgba(162, 229, 255, 0.1);
-}
-
-.toolbar-button:hover:not(:disabled) {
-  border-color: rgba(0, 255, 255, 0.86);
-  color: #ffffff;
-  box-shadow: 0 0 8px rgba(0, 255, 255, 0.14), inset 0 0 0 1px rgba(162, 229, 255, 0.12);
-  transform: translateY(-1px);
-}
-
-.toolbar-button:active:not(:disabled) {
-  transform: translateY(0);
-}
-
-.toolbar-button.active {
-  border-color: rgba(0, 255, 204, 0.86);
-  color: #dfffee;
-  background: linear-gradient(135deg, rgba(0, 255, 204, 0.2), rgba(5, 33, 59, 0.84));
-  box-shadow: 0 0 10px rgba(0, 255, 204, 0.14), inset 0 0 0 1px rgba(180, 255, 228, 0.12);
-}
-
-.toolbar-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.42;
-}
-
-.toolbar-button--primary {
-  border-color: rgba(0, 255, 255, 0.62);
-  color: #e9fdff;
-  background: linear-gradient(135deg, rgba(0, 255, 255, 0.18), rgba(7, 39, 65, 0.86));
+  border-color: rgba(69, 90, 100, 0.82);
+  color: #bdcdd5;
+  box-shadow: 0 0 8px rgba(69, 90, 100, 0.24);
 }
 
 .topology-tooltip {
   position: absolute;
   z-index: 10;
   pointer-events: none;
-  min-width: 158px;
-  max-width: 220px;
-  padding: 8px 11px;
-  border-radius: 5px;
-  border: 1px solid rgba(128, 200, 255, 0.44);
-  background: linear-gradient(140deg, rgba(190, 233, 255, 0.14), rgba(4, 12, 28, 0.88));
-  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.46), inset 0 0 0 1px rgba(170, 228, 255, 0.16);
-  backdrop-filter: blur(9px) saturate(126%);
+  min-width: 172px;
+  max-width: 236px;
+  padding: 10px 12px;
+  border: 1px solid rgba(123, 194, 236, 0.46);
+  background: linear-gradient(145deg, rgba(14, 36, 60, 0.95), rgba(4, 13, 27, 0.95));
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.42), inset 0 0 0 1px rgba(171, 230, 255, 0.1);
   color: #d8f5ff;
-  transform: translate(0, 0);
   overflow: hidden;
-  transition: opacity 0.18s ease, transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
-}
-
-.topology-tooltip::after {
-  content: '';
-  position: absolute;
-  inset: -20% auto -20% -45%;
-  width: 46%;
-  background: linear-gradient(90deg, transparent, rgba(186, 235, 255, 0.24), transparent);
-  transform: skewX(-18deg);
-  animation: glass-sweep 3.6s ease-in-out infinite;
-  pointer-events: none;
+  transition: opacity 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
 }
 
 .topology-tooltip--locked {
-  border-color: rgba(0, 255, 157, 0.45);
-  box-shadow: 0 0 0 1px rgba(0, 255, 157, 0.18), 0 4px 14px rgba(0, 0, 0, 0.5);
+  border-color: rgba(0, 255, 157, 0.5);
+  box-shadow: 0 0 0 1px rgba(0, 255, 157, 0.2), 0 8px 24px rgba(0, 0, 0, 0.48);
 }
 
 .tooltip-head {
@@ -615,20 +580,19 @@ onBeforeUnmount(() => {
 }
 
 .tooltip-title {
-  font-weight: 700;
   color: #00e5ff;
   font-family: var(--font-ui);
-  font-size: 0.68rem;
-  letter-spacing: 0.05em;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
 }
 
 .tooltip-badge {
-  padding: 1px 5px;
-  border-radius: 999px;
+  padding: 1px 6px;
   border: 1px solid rgba(0, 255, 157, 0.34);
-  background: rgba(0, 255, 157, 0.08);
+  background: rgba(0, 255, 157, 0.09);
   color: #b8ffe4;
-  font-size: 0.48rem;
+  font-size: 9px;
   font-family: var(--font-ui);
   letter-spacing: 0.08em;
 }
@@ -637,33 +601,31 @@ onBeforeUnmount(() => {
 .tooltip-metric,
 .tooltip-meta {
   font-family: var(--font-ui);
-  font-size: 0.56rem;
+  font-size: 10px;
 }
 
 .tooltip-type {
-  color: #7ba7bc;
+  color: #82afc5;
   text-transform: uppercase;
 }
 
 .tooltip-metric {
-  margin-top: 2px;
-  color: #b8deea;
+  margin-top: 3px;
+  color: #b9dfeb;
 }
 
 .tooltip-energy {
   position: relative;
-  height: 5px;
-  margin-top: 5px;
+  height: 6px;
+  margin-top: 6px;
   border: 1px solid rgba(137, 204, 255, 0.28);
-  background: rgba(10, 26, 48, 0.72);
-  border-radius: 999px;
+  background: rgba(10, 26, 48, 0.8);
   overflow: hidden;
 }
 
 .tooltip-energy-fill {
   display: block;
   height: 100%;
-  border-radius: inherit;
   background: linear-gradient(90deg, #22d3ff, #5ba8ff);
   box-shadow: 0 0 8px rgba(56, 184, 255, 0.5);
   transform-origin: left center;
@@ -671,154 +633,19 @@ onBeforeUnmount(() => {
 }
 
 .tooltip-meta {
-  margin-top: 5px;
-  color: rgba(151, 215, 236, 0.62);
+  margin-top: 6px;
+  color: rgba(151, 215, 236, 0.68);
   letter-spacing: 0.08em;
 }
 
-.topology-status {
-  position: absolute;
-  left: 10px;
-  bottom: 10px;
-  z-index: 9;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 7px;
-  pointer-events: none;
-  animation: panel-slide-in 640ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
-}
-
-.status-chip,
-.status-summary {
-  display: inline-flex;
-  align-items: center;
-  min-height: 22px;
-  padding: 0 8px;
-  border: 1px solid rgba(0, 229, 255, 0.22);
-  background: linear-gradient(132deg, rgba(197, 233, 255, 0.11), rgba(6, 24, 48, 0.74));
-  color: #97d7ec;
-  font-family: var(--font-ui);
-  font-size: 0.5rem;
-  letter-spacing: 0.08em;
-  box-shadow: inset 0 0 0 1px rgba(160, 228, 255, 0.04);
-  transition: border-color 0.18s ease, color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
-}
-
-.status-chip {
-  color: #ccffe9;
-  border-color: rgba(0, 255, 157, 0.26);
-}
-
-.topology-legend {
-  position: absolute;
-  right: 10px;
-  bottom: 10px;
-  z-index: 9;
-  display: flex;
-  gap: 8px;
-  pointer-events: none;
-  animation: panel-slide-in 700ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
-}
-
-.legend-block {
-  min-width: 168px;
-  padding: 7px 9px;
-  border: 1px solid rgba(118, 197, 255, 0.34);
-  border-radius: 5px;
-  background: linear-gradient(135deg, rgba(192, 231, 255, 0.1), rgba(8, 29, 55, 0.76));
-  backdrop-filter: blur(8px) saturate(120%);
-  position: relative;
-  overflow: hidden;
-  box-shadow: inset 0 0 0 1px rgba(160, 228, 255, 0.04);
-}
-
-.legend-block::after {
-  content: '';
-  position: absolute;
-  top: -30%;
-  left: -42%;
-  width: 38%;
-  height: 160%;
-  background: linear-gradient(90deg, transparent, rgba(201, 236, 255, 0.18), transparent);
-  transform: skewX(-16deg);
-  animation: glass-sweep 4.8s ease-in-out infinite;
-  pointer-events: none;
-}
-
-.legend-title {
-  color: #b4efff;
-  font-family: var(--font-ui);
-  font-size: 0.54rem;
-  letter-spacing: 0.1em;
-  margin-bottom: 6px;
-}
-
-.legend-item {
-  display: grid;
-  grid-template-columns: 10px auto 1fr;
-  align-items: center;
-  column-gap: 6px;
-  margin-bottom: 4px;
-}
-
-.legend-item--line {
-  grid-template-columns: 22px auto;
-}
-
-.legend-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-}
-
-.legend-line {
-  width: 20px;
-  height: 2px;
-  border-radius: 2px;
-}
-
-.legend-label {
-  color: #d4f6ff;
-  font-family: var(--font-ui);
-  font-size: 0.56rem;
-  letter-spacing: 0.05em;
-}
-
-.legend-note {
-  color: #7fa8b6;
-  font-family: var(--font-ui);
-  font-size: 0.5rem;
-  text-align: right;
-}
-
-.legend-range {
-  margin-top: 2px;
-  color: #9ddbf1;
-  font-family: var(--font-ui);
-  font-size: 0.52rem;
-  letter-spacing: 0.05em;
-}
-
-.legend-note--meta {
-  margin-top: 2px;
-  text-align: left;
-}
-
-.legend-divider {
-  margin: 0 5px;
-  color: rgba(125, 176, 197, 0.75);
-}
-
-/* ── Risk level tooltip styles ──────────────────── */
 .tooltip-risk {
   display: flex;
   align-items: center;
   gap: 5px;
-  margin-top: 3px;
+  margin-top: 4px;
   font-family: var(--font-ui);
-  font-size: 0.54rem;
-  letter-spacing: 0.07em;
+  font-size: 10px;
+  letter-spacing: 0.08em;
   font-weight: 700;
 }
 
@@ -829,55 +656,190 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
 }
 
-.tooltip-risk--critical { color: #FF1744; }
-.tooltip-risk--critical .tooltip-risk-dot { background: #FF1744; box-shadow: 0 0 6px #FF1744; }
+.tooltip-risk--critical { color: #ff1744; }
+.tooltip-risk--critical .tooltip-risk-dot { background: #ff1744; box-shadow: 0 0 6px #ff1744; }
+.tooltip-risk--high { color: #ff5722; }
+.tooltip-risk--high .tooltip-risk-dot { background: #ff5722; box-shadow: 0 0 6px #ff5722; }
+.tooltip-risk--medium { color: #ffc107; }
+.tooltip-risk--medium .tooltip-risk-dot { background: #ffc107; box-shadow: 0 0 5px #ffc107; }
+.tooltip-risk--low, .tooltip-risk--info { color: #90a4ae; }
+.tooltip-risk--low .tooltip-risk-dot, .tooltip-risk--info .tooltip-risk-dot { background: #455a64; box-shadow: 0 0 4px #455a64; }
 
-.tooltip-risk--high { color: #FF5722; }
-.tooltip-risk--high .tooltip-risk-dot { background: #FF5722; box-shadow: 0 0 6px #FF5722; }
+.topology-status {
+  position: absolute;
+  left: 16px;
+  bottom: 16px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+  animation: panel-slide-in 660ms cubic-bezier(0.18, 0.8, 0.22, 1) both;
+}
 
-.tooltip-risk--medium { color: #FFC107; }
-.tooltip-risk--medium .tooltip-risk-dot { background: #FFC107; box-shadow: 0 0 5px #FFC107; }
+.status-chip,
+.status-summary,
+.status-focus {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 12px;
+  border: 1px solid rgba(97, 175, 215, 0.34);
+  background: linear-gradient(145deg, rgba(14, 33, 56, 0.9), rgba(6, 16, 31, 0.92));
+  color: #9fd8ee;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
 
-.tooltip-risk--low,
-.tooltip-risk--info { color: #90A4AE; }
-.tooltip-risk--low .tooltip-risk-dot,
-.tooltip-risk--info .tooltip-risk-dot { background: #455A64; box-shadow: 0 0 4px #455A64; }
+.status-summary {
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
-/* ── Risk level legend extras ────────────────────── */
-.legend-separator {
+.status-chip {
+  color: #d0ffe9;
+  border-color: rgba(0, 255, 157, 0.34);
+}
+
+.status-focus {
+  max-width: 260px;
+  color: #bdeeff;
+  border-color: rgba(70, 182, 255, 0.38);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 分离后的图例容器 */
+.topology-legend {
+  position: absolute;
+  z-index: 8;
+  pointer-events: none;
+  animation: panel-slide-in 720ms cubic-bezier(0.18, 0.8, 0.22, 1) both;
+}
+
+.topology-legend--left {
+  left: 20px;
+  bottom: 70px; 
+}
+
+.topology-legend--right {
+  right: 20px;
+  bottom: 16px;
+}
+
+.legend-block {
+  padding: 12px 14px;
+  border: 1px solid var(--panel-border);
+  background: linear-gradient(145deg, rgba(15, 35, 59, 0.92), rgba(5, 14, 29, 0.92));
+  position: relative;
+  box-shadow: var(--panel-shadow), inset 0 0 0 1px rgba(160, 228, 255, 0.05);
+}
+
+.legend-block--compact {
+  width: 180px;
+  min-width: 150px;
+}
+
+.topology-legend--right .legend-block {
+  width: 200px;
+}
+
+.legend-block::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
   height: 1px;
-  background: rgba(0, 229, 255, 0.14);
-  margin: 6px 0;
+  background: linear-gradient(90deg, transparent, rgba(141, 214, 253, 0.55), transparent);
+}
+
+.legend-title {
+  color: #b6f0ff;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  margin-bottom: 10px;
 }
 
 .legend-title--sub {
-  font-size: 0.47rem;
-  color: rgba(180, 239, 255, 0.7);
-  margin-bottom: 4px;
+  font-size: 10px;
+  color: rgba(180, 239, 255, 0.75);
+  margin-bottom: 8px;
+}
+
+.legend-item {
+  display: grid;
+  grid-template-columns: 10px auto 1fr;
+  align-items: center;
+  column-gap: 8px;
+  margin-bottom: 6px;
+}
+
+.legend-item--line {
+  grid-template-columns: 24px auto;
+}
+
+.legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
 }
 
 .legend-dot--risk {
   width: 7px;
   height: 7px;
-  border-radius: 50%;
 }
 
-@keyframes glass-sweep {
-  0% { left: -48%; opacity: 0; }
-  12% { opacity: 1; }
-  30% { left: 128%; opacity: 0; }
-  100% { left: 128%; opacity: 0; }
+.legend-line {
+  width: 22px;
+  height: 2px;
+}
+
+.legend-label {
+  color: #d8f6ff;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  letter-spacing: 0.05em;
+}
+
+.legend-note {
+  color: #7fa8b6;
+  font-family: var(--font-ui);
+  font-size: 10px;
+  text-align: right;
+}
+
+.legend-range {
+  margin-top: 6px;
+  color: #a6dff2;
+  font-family: var(--font-ui);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+}
+
+.legend-note--meta {
+  margin-top: 4px;
+  text-align: left;
+}
+
+.legend-divider {
+  margin: 0 6px;
+  color: rgba(125, 176, 197, 0.75);
+}
+
+.legend-separator {
+  height: 1px;
+  background: rgba(0, 229, 255, 0.16);
+  margin: 10px 0;
 }
 
 @keyframes panel-slide-in {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes energy-pulse {
@@ -887,47 +849,19 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 900px) {
-  .topology-filter-bar {
-    gap: 6px;
-  }
-
-  .filter-label,
-  .filter-chip {
-    font-size: 11px;
-  }
-
-  .filter-chip {
-    min-height: 26px;
-    padding: 0 10px;
-  }
-
   .topology-toolbar {
-    left: 8px;
-    right: 8px;
+    flex-wrap: wrap;
   }
-
-  .toolbar-search,
-  .toolbar-actions {
-    width: 100%;
-  }
-
   .toolbar-search {
-    min-width: 0;
+    width: 100%;
+    flex: 1 1 100%;
   }
-
-  .toolbar-input {
-    min-width: 0;
+  .topology-filter-bar {
+    top: 110px;
   }
-
-  .topology-legend {
-    left: 10px;
-    right: 10px;
-    bottom: 8px;
-    flex-direction: column;
-  }
-
-  .legend-block {
-    min-width: 0;
+  .topology-legend--left {
+    left: 16px;
+    bottom: 60px;
   }
 }
 </style>

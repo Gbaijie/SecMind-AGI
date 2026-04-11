@@ -126,7 +126,7 @@ const buildOption = () => {
     : 'NO CATEGORY DATA'
 
   const centerX = '50%'
-  const centerY = fullscreen ? '44%' : '44%'
+  const centerY = fullscreen ? '50%' : '50%'
   const centerCoord = [centerX, centerY]
 
   const enriched = categories.map((item, idx) => {

@@ -33,8 +33,8 @@ const props = defineProps({
 })
 
 const getRadarLayout = (fullscreen) => {
-  if (fullscreen) return { center: ['50%', '50%'], radius: '80%' }
-  return { center: ['50%', '50%'], radius: '63%' }
+  if (fullscreen) return { center: ['50%', '50%'], radius: '75%' }
+  return { center: ['50%', '50%'], radius: '60%' }
 }
 
 const rateLevel = (value, max) => {
@@ -136,7 +136,7 @@ const buildOption = () => {
     const gradeStyle = `grade${level.grade}`
     const shortName = abbreviateTactic(item)
     return {
-      name: `{en|${shortName}} {${gradeStyle}|${level.grade}}`,
+      name: `{en|${shortName}}\n{${gradeStyle}|${level.grade}}`,
       max: Number(indicatorMax[idx]) || maxVal,
     }
   })
@@ -181,25 +181,25 @@ const buildOption = () => {
       axisName: {
         color: '#eef5ff',
         fontFamily: 'Roboto Mono',
-        nameGap: fullscreen ? 22 : 8,
+        nameGap: fullscreen ? 24 : 14,
         fontSize: fullscreen ? 12 : 12,
         fontWeight: 500,
         rich: {
           en: {
             color: '#00e5ff',
             fontSize: fullscreen ? 20 : 12,
-            lineHeight: fullscreen ? 18 : 16,
+            lineHeight: fullscreen ? 30 : 12,
             fontWeight: 500,
             textShadowColor: 'rgba(0, 229, 255, 0.6)',
             textShadowBlur: 2,
+            align: 'center',
           },
           gradeA: {
             color: '#ff5b75',
             fontSize: fullscreen ? 24 : 14,
-            lineHeight: fullscreen ? 16 : 14,
+            lineHeight: fullscreen ? 24 : 18,
             fontWeight: 500,
             fontFamily: 'Roboto Mono',
-            marginLeft: 4,
             textShadowColor: 'rgba(255, 91, 117, 0.95)',
             textShadowBlur: 2,
             align: 'center',
@@ -207,7 +207,7 @@ const buildOption = () => {
           gradeB: {
             color: '#7fffc4',
             fontSize: fullscreen ? 24 : 14,
-            lineHeight: fullscreen ? 16 : 14,
+            lineHeight: fullscreen ? 24 : 18,
             fontWeight: 500,
             fontFamily: 'Roboto Mono',
             marginLeft: 4,
@@ -218,7 +218,7 @@ const buildOption = () => {
           gradeC: {
             color: '#8befff',
             fontSize: fullscreen ? 24 : 14,
-            lineHeight: fullscreen ? 16 : 14,
+            lineHeight: fullscreen ? 24 : 18,
             fontWeight: 500,
             fontFamily: 'Roboto Mono',
             marginLeft: 4,

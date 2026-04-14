@@ -62,17 +62,18 @@ const router = createRouter({
   routes,
 })
 
-router.beforeEach((to, from, next) => {
+router.beforeEach((to) => {
   const authStore = useAuthStore()
   authStore.syncFromStorage()
   const requiresAuth = to.matched.some((record) => record.meta.requiresAuth)
 
-  if (requiresAuth && !authStore.isAuthenticated) {
-    next('/login')
-    return
+  if (to.path === '/login' && authStore.isAuthenticated) {
+    return '/dashboard'
   }
 
-  next()
+  if (requiresAuth && !authStore.isAuthenticated) {
+    return '/login'
+  }
 })
 
 export default router

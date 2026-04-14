@@ -33,7 +33,6 @@ export function useChatSettings({ router, apiClient, currentSession, sessions })
 
   const { llmProvider, llmModel, providerApiKey, webSearchApiKey } = storeToRefs(appStore)
 
-  const showSettingsModal = ref(false)
   const isExporting = ref(false)
   const selectedSessionForExport = ref(currentSession.value)
 
@@ -69,9 +68,7 @@ export function useChatSettings({ router, apiClient, currentSession, sessions })
   watch(
     () => currentSession.value,
     (sessionId) => {
-      if (!showSettingsModal.value) {
-        selectedSessionForExport.value = sessionId
-      }
+      selectedSessionForExport.value = sessionId
     },
     { immediate: true }
   )
@@ -125,15 +122,6 @@ export function useChatSettings({ router, apiClient, currentSession, sessions })
     },
     { immediate: true }
   )
-
-  const openSettingsModal = () => {
-    selectedSessionForExport.value = currentSession.value
-    showSettingsModal.value = true
-  }
-
-  const closeSettingsModal = () => {
-    showSettingsModal.value = false
-  }
 
   const ensureSessionMessages = async (sessionId) => {
     const cachedMessages = chatStore.messages[sessionId]
@@ -190,14 +178,7 @@ export function useChatSettings({ router, apiClient, currentSession, sessions })
     return true
   }
 
-  const handleLogoutFromModal = () => {
-    if (handleLogout()) {
-      closeSettingsModal()
-    }
-  }
-
   return {
-    showSettingsModal,
     isExporting,
     selectedSessionForExport,
     llmProvider,
@@ -212,9 +193,7 @@ export function useChatSettings({ router, apiClient, currentSession, sessions })
     updateModel,
     updateProviderApiKey,
     updateWebSearchApiKey,
-    openSettingsModal,
-    closeSettingsModal,
     handleExportSelectedSession,
-    handleLogoutFromModal,
+    handleLogout,
   }
 }

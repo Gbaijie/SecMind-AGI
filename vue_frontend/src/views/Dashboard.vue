@@ -225,7 +225,7 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { NButton, NCard, NGi, NGrid, NModal } from 'naive-ui'
 import {
   ChevronDownIcon,
@@ -237,10 +237,6 @@ import {
 import api from '../api'
 import FuiCard from '../components/FuiCard.vue'
 import ChartDrillGuidance from '../components/layout/ChartDrillGuidance.vue'
-import TopologyScene from '../components/TopologyScene.vue'
-import CategoryDonutChart from '../components/charts/CategoryDonutChart.vue'
-import LogInflowChart from '../components/charts/LogInflowChart.vue'
-import ThreatRadarChart from '../components/charts/ThreatRadarChart.vue'
 import { buildAnalysisJumpEntry } from '../composables/useAnalysisJump'
 import { useDashboardStats } from '../composables/useDashboardStats'
 import { useFullscreenPanel } from '../composables/useFullscreenPanel'
@@ -248,6 +244,11 @@ import { useChartDrillGuidance } from '../composables/useChartDrillGuidance'
 import { useTextScramble } from '../composables/useTextScramble'
 import { useRouter } from 'vue-router'
 import { useChatStore } from '../stores/chatStore'
+
+const TopologyScene = defineAsyncComponent(() => import('../components/TopologyScene.vue'))
+const CategoryDonutChart = defineAsyncComponent(() => import('../components/charts/CategoryDonutChart.vue'))
+const LogInflowChart = defineAsyncComponent(() => import('../components/charts/LogInflowChart.vue'))
+const ThreatRadarChart = defineAsyncComponent(() => import('../components/charts/ThreatRadarChart.vue'))
 
 const isTopologyCollapsed = ref(false)
 const topologyPanelRef = ref(null)

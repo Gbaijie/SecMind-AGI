@@ -31,7 +31,6 @@ export const useAppStore = defineStore('app', {
     useWebSearch: false,
     isEditing: false,
     editingMessageId: null,
-    isSidebarOpen: true,
     llmProvider: DEFAULT_PROVIDER,
     llmModel: DEFAULT_MODEL,
     providerApiKey: DEFAULT_PROVIDER_API_KEY,
@@ -71,14 +70,6 @@ export const useAppStore = defineStore('app', {
     clearEditing() {
       this.isEditing = false
       this.editingMessageId = null
-    },
-
-    setSidebarOpen(value) {
-      this.isSidebarOpen = value
-    },
-
-    toggleSidebar() {
-      this.isSidebarOpen = !this.isSidebarOpen
     },
 
     setLlmProvider(provider) {

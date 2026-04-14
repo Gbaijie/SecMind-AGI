@@ -131,40 +131,72 @@ Browser (Vue 3 SOC Console)
 
 ## 5. 前端实现说明
 
-### 5.1 路由与布局
+### 5.1 目录分层与组织
 
-- 路由：`/login`、`/dashboard`、`/chat`、`/intel`、`/settings`。
-- 布局：`GlobalLayout` 负责侧栏导航、顶部状态栏和页面容器。
+前端源码位于 `vue_frontend/src`，当前采用“页面编排 + 领域组件 + 组合式逻辑”组织方式：
 
-### 5.2 分析终端（Chat）
+- `layouts/`：仅保留 `GlobalLayout.vue` 作为统一应用壳（侧栏、顶部、内容区）。
+- `views/`：页面入口层（`Login`、`Dashboard`、`ChatPage`、`IntelQuery`、`Settings`）。
+- `components/`：可复用 UI 组件与业务组件（聊天、图表、拓扑、情报子模块、布局片段）。
+- `composables/`：业务逻辑抽离（聊天会话流、设置、看板数据、全屏控制、情报查询等）。
+- `stores/`：Pinia 状态中心（`auth`、`app`、`chat`）。
+- `assets/` 与 `constants/`：全局样式令牌、静态资源与图表色板常量。
 
-- 会话操作：新建、切换、删除、搜索、清空。
-- 输入能力：DB 检索开关、联网检索开关、多智能体开关、附件上传。
-- 消息能力：流式更新、Markdown 渲染、代码高亮、复制/编辑/重新生成。
-- 多智能体展示：可展开查看 RAG 与 WEB 的实时输出、状态与错误详情。
+### 5.2 路由与导航守卫
 
-### 5.3 安全态势看板（Dashboard）
+- 路由入口：`/login`、`/dashboard`、`/chat`、`/intel`、`/settings`。
+- 路由采用按页面懒加载（dynamic import），减少初始包体积。
+- 导航守卫逻辑：
+  - 访问受保护页面时，若未登录则重定向到 `/login`。
+  - 已登录状态访问 `/login` 时自动回跳 `/dashboard`。
+- 未匹配路径统一回退到看板入口。
 
-- 图表组件：
-  - 威胁雷达图（Threat Radar）
-  - 日志流入图（Log Ingest Stream）
-  - 分类分布图（Category Distribution）
-  - 三维拓扑图（Global Attack Topology）
-- 支持卡片折叠、全屏查看、Esc 退出、引导提示。
-- 支持看板下钻：点击图例/数据点可跳转聊天终端并预填分析问题。
+### 5.3 状态管理（Pinia）
 
-### 5.4 系统设置（Settings）
+- `authStore`：认证凭据与登录态同步（`apiKey`、`isAuthenticated`）。
+- `appStore`：应用级 UI 与模型配置状态（加载、错误、检索开关、编辑态、LLM 配置、API Key）。
+- `chatStore`：会话列表、消息流、草稿、分析下钻上下文与历史。
 
-- 配置 Provider、模型、Provider API Key、Web Search API Key。
-- 支持按会话导出 HTML 记录。
-- 支持一键退出登录。
+本轮重构后的状态管理特征：
 
-### 5.5 情报查询页（IntelQuery）
+- 删除未使用的侧栏状态字段，避免全局状态冗余。
+- 收敛 `chatStore` 对外暴露接口，仅保留实际被业务调用的方法。
+- 会话草稿与分析下钻上下文继续保持本地持久化。
 
-- 提供情报数据检索、结果列表、主从详情和导出能力。
-- 列表区采用远程分页表格，支持按记录点击下钻查看详情。
-- 导出中心支持 CSV / JSON、全部结果 / 当前页、字段多选、包含 details、文件名前缀。
-- 查询条目可跳转到分析终端并自动预填上下文，方便继续研判。
+### 5.4 核心页面与组件机制
+
+- Chat：
+  - `ChatPage` 负责会话侧栏与终端编排；`Chat.vue` 负责终端消息渲染与输入交互。
+  - 通过 `useChatSession` 统一处理历史加载、流式响应、多智能体状态、编辑重提交流程。
+- Dashboard：
+  - 拓扑与三张图表均支持全屏、引导提示和分析下钻。
+  - 重型组件（拓扑/图表）改为异步组件加载，提升路由首屏加载效率。
+- IntelQuery：
+  - 统一在 `useIntelQuery` 中处理筛选、分页、详情请求、导出参数编排与取消请求。
+- Settings：
+  - 配置模型与密钥、连通性探测、会话导出、登出操作。
+  - 清理了历史遗留的弹窗状态逻辑，保持页面逻辑单一。
+
+### 5.5 UI 规范与构建运行
+
+- UI 基线：`main.js` 通过 `NConfigProvider` 统一注入 Naive UI 主题覆盖。
+- 样式令牌：`src/assets/styles.css` 提供全局设计变量；页面样式优先复用变量，减少硬编码色值。
+- 组件脚本：所有 `.vue` 组件采用 `script setup` + Composition API。
+
+前端运行命令：
+
+```bash
+cd vue_frontend
+npm install
+npm run dev
+```
+
+构建与预览：
+
+```bash
+npm run build
+npm run preview
+```
 
 ---
 

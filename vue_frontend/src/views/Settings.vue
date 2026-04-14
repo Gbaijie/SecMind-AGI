@@ -129,7 +129,7 @@
               </div>
             </div>
             
-            <button type="button" class="tech-kill-btn full-width" @click="handleLogoutFromModal">
+            <button type="button" class="tech-kill-btn full-width" @click="handleLogout">
               <LogoutIcon class="btn-icon" />
               <span>TERMINATE_SESSION</span>
             </button>
@@ -199,7 +199,7 @@ const {
   updateProviderApiKey,
   updateWebSearchApiKey,
   handleExportSelectedSession,
-  handleLogoutFromModal,
+  handleLogout,
 } = useChatSettings({
   router,
   apiClient: api,
@@ -272,6 +272,14 @@ const handlePing = async (type) => {
 
 <style scoped>
 /* 核心设计理念：抛弃模糊玻璃态，采用深色实体纯色、锐利几何边角、工业级赛博朋克 UI */
+.settings-dashboard {
+  --settings-bg: #02060d;
+  --settings-panel-bg: #050a11;
+  --settings-panel-border: #102a3a;
+  --settings-cyan: var(--neon-cyan);
+  --settings-danger: #ff4975;
+}
+
 .dashboard-page {
   min-height: 0;
   height: 100%;
@@ -280,7 +288,7 @@ const handlePing = async (type) => {
   padding: clamp(0.9rem, 1.2vw, 1.25rem);
   display: flex;
   flex-direction: column;
-  background-color: #02060d;
+  background-color: var(--settings-bg);
 }
 
 /* 背景 CRT 扫描线 */
@@ -330,8 +338,8 @@ const handlePing = async (type) => {
   display: flex;
   flex-direction: column;
   position: relative;
-  background: #050a11 !important; /* 彻底移除 rgba/毛玻璃，使用高纯度暗黑系 */
-  border: 1px solid #102a3a;
+  background: var(--settings-panel-bg) !important;
+  border: 1px solid var(--settings-panel-border);
   box-shadow: inset 0 0 28px rgba(0, 229, 255, 0.04), 0 8px 30px rgba(0, 0, 0, 0.28);
 }
 
@@ -342,7 +350,7 @@ const handlePing = async (type) => {
   left: 0;
   right: 0;
   bottom: 0;
-  background-image: radial-gradient(#00e5ff 0.5px, transparent 0.5px);
+  background-image: radial-gradient(var(--settings-cyan) 0.5px, transparent 0.5px);
   background-size: 14px 14px;
   opacity: 0.045;
   pointer-events: none;
@@ -364,13 +372,13 @@ const handlePing = async (type) => {
   right: -1px;
   width: 20px;
   height: 20px;
-  background: #00e5ff;
+  background: var(--settings-cyan);
   clip-path: polygon(100% 0, 0 0, 100% 100%);
   z-index: 2;
 }
 
 .panel-decorative-corner.danger {
-  background: #ff4975;
+  background: var(--settings-danger);
 }
 
 .settings-panel :deep(.fui-card-body) {
@@ -383,11 +391,11 @@ const handlePing = async (type) => {
 
 /* 实心高亮面板分类 */
 .solid-tech-panel {
-  border-top: 2px solid #00e5ff;
+  border-top: 2px solid var(--settings-cyan);
 }
 
 .solid-danger-panel {
-  border-top: 2px solid #ff4975;
+  border-top: 2px solid var(--settings-danger);
   background: #0a0406 !important;
 }
 
@@ -452,7 +460,7 @@ const handlePing = async (type) => {
 .blink-red { background-color: #ff0055; animation: blink 1s infinite; box-shadow: 0 0 8px #ff0055; }
 
 .ticker-value {
-  margin-left: 0.4rem;
+  margin: 0 0.4rem;
   color: #fff;
   letter-spacing: 0.03em;
 }

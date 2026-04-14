@@ -427,7 +427,7 @@ export default {
   testConnection(data) {
     return axiosApi.post('/test_connection', data);
   },
-  
+
   streamChat,
 
   getHistory(sessionId) {
@@ -449,13 +449,6 @@ export default {
     return axiosApi.get('/dashboard/stats');
   },
 
-  queryLogs(params = {}, requestConfig = {}) {
-    return axiosApi.get('/query/logs', {
-      params,
-      ...requestConfig,
-    });
-  },
-
   queryLogsSafe(params = {}, requestConfig = {}) {
     return runSafeRequest(
       () => axiosApi.get('/query/logs', {
@@ -475,13 +468,6 @@ export default {
       () => axiosApi.get(`/query/logs/${encodeURIComponent(recordId)}`, requestConfig),
       '详情查询失败'
     );
-  },
-
-  getQueryFacets(params = {}, requestConfig = {}) {
-    return axiosApi.get('/query/facets', {
-      params,
-      ...requestConfig,
-    });
   },
 
   async exportQueryLogs(params = {}, requestConfig = {}) {

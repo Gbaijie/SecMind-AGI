@@ -112,21 +112,15 @@ const handleSiderLeave = () => {
 </script>
 
 <style scoped>
-/* 定义局部主题变量以便统一调优 */
-:local {
-  --theme-cyan: #00e5ff;
-  --theme-purple: #8d5ef7;
-  --menu-bg-hover: rgba(0, 229, 255, 0.08);
-  --menu-bg-active: rgba(0, 229, 255, 0.12);
-  --transition-bezier: cubic-bezier(0.16, 1, 0.3, 1);
-}
-
 .global-layout {
   width: 100vw;
   height: 100vh;
   overflow: hidden;
   position: relative;
   z-index: 1;
+  --menu-bg-hover: rgba(0, 229, 255, 0.08);
+  --menu-bg-active: rgba(0, 229, 255, 0.12);
+  --transition-bezier: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 /* 优化侧边栏背景与阴影。移除了自定义的 width transition，交还给 Naive UI */
@@ -156,7 +150,7 @@ const handleSiderLeave = () => {
   align-items: center;
   justify-content: center;
   gap: 0.2rem;
-  color: var(--theme-cyan);
+  color: var(--neon-cyan);
   text-shadow: 0 0 8px rgba(0, 229, 255, 0.5);
   letter-spacing: 0.1em;
   font-family: var(--font-brand);
@@ -175,7 +169,7 @@ const handleSiderLeave = () => {
 .brand-accent {
   font-weight: 900;
   font-size: 0.9rem;
-  color: var(--theme-purple);
+  color: var(--neon-purple);
   animation: brand-pulse 4s infinite ease-in-out;
 }
 
@@ -216,7 +210,7 @@ const handleSiderLeave = () => {
 .sider-menu :deep(.n-menu-item-content--selected) {
   border-color: rgba(0, 229, 255, 0.6);
   background: linear-gradient(90deg, var(--menu-bg-active), transparent);
-  box-shadow: inset 3px 0 0 var(--theme-cyan);
+  box-shadow: inset 3px 0 0 var(--neon-cyan);
 }
 
 /* 消除原有的被选中的默认文字颜色偏移 */
@@ -228,8 +222,8 @@ const handleSiderLeave = () => {
 
 /* 选中态图标：增加赛博全息发光效果 */
 .sider-menu :deep(.n-menu-item-content--selected .menu-icon) {
-  color: var(--theme-cyan);
-  filter: drop-shadow(0 0 6px var(--theme-cyan));
+  color: var(--neon-cyan);
+  filter: drop-shadow(0 0 6px var(--neon-cyan));
 }
 
 .sider-menu :deep(.n-menu-item-content__title) {

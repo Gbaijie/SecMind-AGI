@@ -463,30 +463,6 @@ export const useChatStore = defineStore('chat', () => {
     }
   };
 
-  const updateMessageAtIndex = (sessionId, messageIndex, payload) => {
-    if (!messages.value[sessionId] || !messages.value[sessionId][messageIndex]) return;
-
-    const message = messages.value[sessionId][messageIndex];
-
-    if (payload.content_chunk) {
-      if (!message.content) {
-        message.content = '';
-      }
-      message.content += payload.content_chunk;
-    }
-
-    if (payload.think_chunk) {
-      if (message.think_process === null || message.think_process === undefined) {
-        message.think_process = '';
-      }
-      message.think_process += payload.think_chunk;
-    }
-
-    if (payload.duration) {
-      message.duration = payload.duration;
-    }
-  };
-
   const removeLastMessage = (sessionId) => {
     if (!messages.value[sessionId] || messages.value[sessionId].length === 0) return;
     const lastMessage = messages.value[sessionId][messages.value[sessionId].length - 1];
@@ -541,11 +517,6 @@ export const useChatStore = defineStore('chat', () => {
     draftInputs,
     analysisJumpDraft,
     analysisJumpHistory,
-    persistSessions,
-    persistCurrentSession,
-    persistDraftInputs,
-    persistAnalysisJumpDraft,
-    persistAnalysisJumpHistory,
     setSessionDraft,
     clearSessionDraft,
     setAnalysisJumpDraft,
@@ -560,7 +531,6 @@ export const useChatStore = defineStore('chat', () => {
     renameSession,
     addMessage,
     updateLastMessage,
-    updateMessageAtIndex,
     updateAgentChunk,
     updateAgentStatus,
     removeLastMessage,

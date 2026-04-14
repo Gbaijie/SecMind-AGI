@@ -16,6 +16,8 @@ const ANALYSIS_JUMP_HISTORY_LIMIT = 50;
 export const EXPORT_TARGET_SESSION_KEY = 'deepsoc_exportTargetSessionId';
 const USER_PREFIX = '用户：';
 const ASSISTANT_PREFIX = '回复：';
+const MULTI_AGENT_META_PREFIX = '【MULTI_AGENT_META】';
+const MULTI_AGENT_META_SUFFIX = '【/MULTI_AGENT_META】';
 
 const readStoredJson = (storage, key, fallback) => {
   try {
@@ -55,20 +57,54 @@ const unescapeContextText = (text) => {
   return restored.replace(/\n\\回复：/g, '\n回复：');
 };
 
+const normalizeAgentNode = (node) => ({
+  status: node?.status || 'idle',
+  content: node?.content || '',
+  error: node?.error || '',
+  errorDetail: node?.errorDetail || null,
+});
+
+const normalizeAgentData = (agentData) => ({
+  rag: normalizeAgentNode(agentData?.rag),
+  web: normalizeAgentNode(agentData?.web),
+});
+
+const parseMultiAgentMetaLine = (line) => {
+  if (!line.startsWith(MULTI_AGENT_META_PREFIX) || !line.endsWith(MULTI_AGENT_META_SUFFIX)) {
+    return null;
+  }
+
+  const raw = line.slice(MULTI_AGENT_META_PREFIX.length, -MULTI_AGENT_META_SUFFIX.length).trim();
+  if (!raw) return null;
+
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+};
+
 const parseConversationHistory = (contextText) => {
   const history = [];
   if (!contextText) return history;
 
   let currentRole = null;
   let currentLines = [];
+  let currentAgentMeta = null;
 
   const flushCurrent = () => {
     if (!currentRole) return;
     const joined = currentLines.join('\n').trim();
     const content = unescapeContextText(joined);
-    if (content) {
-      history.push({ role: currentRole, content });
+    if (content || currentAgentMeta) {
+      const entry = { role: currentRole, content };
+      if (currentRole === 'assistant' && currentAgentMeta) {
+        entry.agentData = normalizeAgentData(currentAgentMeta);
+      }
+      history.push(entry);
     }
+    currentAgentMeta = null;
   };
 
   const normalized = String(contextText).replace(/\r\n/g, '\n').replace(/\r/g, '\n');
@@ -77,6 +113,7 @@ const parseConversationHistory = (contextText) => {
       flushCurrent();
       currentRole = 'user';
       currentLines = [line.slice(USER_PREFIX.length)];
+      currentAgentMeta = null;
       continue;
     }
 
@@ -84,7 +121,16 @@ const parseConversationHistory = (contextText) => {
       flushCurrent();
       currentRole = 'assistant';
       currentLines = [line.slice(ASSISTANT_PREFIX.length)];
+      currentAgentMeta = null;
       continue;
+    }
+
+    if (currentRole === 'assistant') {
+      const parsedMeta = parseMultiAgentMetaLine(line);
+      if (parsedMeta) {
+        currentAgentMeta = parsedMeta;
+        continue;
+      }
     }
 
     if (currentRole) {
@@ -455,11 +501,19 @@ export const useChatStore = defineStore('chat', () => {
 
     const history = parseConversationHistory(historyText);
     history.forEach((message) => {
-      addMessage(sessionId, message.role === 'user', {
+      const isUser = message.role === 'user';
+      const payload = {
         content: message.content,
         think_process: null,
         duration: null,
-      });
+      };
+
+      if (!isUser && message.agentData) {
+        payload.isMultiAgent = true;
+        payload.agentData = normalizeAgentData(message.agentData);
+      }
+
+      addMessage(sessionId, isUser, payload);
     });
   };
 

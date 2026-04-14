@@ -56,6 +56,19 @@ export function useChatSession({ apiClient, messagesContainerRef, chatInputRef }
     return sessions.value.filter((sessionId) => sessionId.toLowerCase().includes(query))
   })
 
+  const createNextSessionName = () => {
+    const prefix = '新对话'
+    const existingNumbers = sessions.value
+      .map((sessionId) => {
+        const match = String(sessionId || '').trim().match(/^新对话\s*(\d+)$/)
+        return match ? Number.parseInt(match[1], 10) : null
+      })
+      .filter((value) => Number.isInteger(value) && value > 0)
+
+    const nextNumber = existingNumbers.length > 0 ? Math.max(...existingNumbers) + 1 : 1
+    return `${prefix}${nextNumber}`
+  }
+
   const resolveScrollContainer = (scrollbar) => {
     if (!scrollbar) return null
     const inner = scrollbar.scrollbarInstRef?.value
@@ -151,8 +164,10 @@ export function useChatSession({ apiClient, messagesContainerRef, chatInputRef }
     await loadHistory(chatStore.currentSession)
   }
 
-  const handleCreateSession = (sessionId) => {
+  const handleCreateSession = () => {
     appStore.clearEditing()
+
+    const sessionId = createNextSessionName()
     chatStore.addSession(sessionId)
     chatStore.clearSessionMessages(sessionId)
     loadHistory(sessionId)

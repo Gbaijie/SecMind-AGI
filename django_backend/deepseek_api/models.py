@@ -1,3 +1,4 @@
+import json
 from django.db import models
 import string
 import random
@@ -78,6 +79,25 @@ class ConversationSession(models.Model):
         restored = restored.replace("\n\\回复：", "\n回复：")
         return restored
 
+    @staticmethod
+    def _parse_multi_agent_meta_line(line: str):
+        prefix = "【MULTI_AGENT_META】"
+        suffix = "【/MULTI_AGENT_META】"
+
+        if not line.startswith(prefix) or not line.endswith(suffix):
+            return None
+
+        raw = line[len(prefix) : -len(suffix)].strip()
+        if not raw:
+            return None
+
+        try:
+            parsed = json.loads(raw)
+        except Exception:
+            return None
+
+        return parsed if isinstance(parsed, dict) else None
+
     def update_context(self, user_input, bot_reply):
         """
         原子更新上下文。
@@ -147,27 +167,41 @@ class ConversationSession(models.Model):
 
         current_role = None
         current_lines = []
+        current_meta = None
 
         def flush_current():
+            nonlocal current_meta
             if not current_role:
                 return
             joined = "\n".join(current_lines).strip()
             content = self._unescape_context_text(joined)
-            if content:
-                history.append({"role": current_role, "content": content})
+            if content or current_meta:
+                entry = {"role": current_role, "content": content}
+                if current_role == "assistant" and current_meta:
+                    entry["agent_meta"] = current_meta
+                history.append(entry)
+            current_meta = None
 
         for line in self.context.replace("\r\n", "\n").replace("\r", "\n").split("\n"):
             if line.startswith("用户："):
                 flush_current()
                 current_role = "user"
                 current_lines = [line[3:]]
+                current_meta = None
                 continue
 
             if line.startswith("回复："):
                 flush_current()
                 current_role = "assistant"
                 current_lines = [line[3:]]
+                current_meta = None
                 continue
+
+            if current_role == "assistant":
+                parsed_meta = self._parse_multi_agent_meta_line(line)
+                if parsed_meta is not None:
+                    current_meta = parsed_meta
+                    continue
 
             if current_role:
                 current_lines.append(line)

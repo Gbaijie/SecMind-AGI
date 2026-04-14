@@ -66,6 +66,11 @@
   --toolbar-focus-border: rgba(0, 255, 255, 0.85);
   --toolbar-placeholder: #b9d6ea;
 
+  /* ── 滚动条（终端暗色细滚动条）──────────────────── */
+  --scrollbar-track: rgba(2, 8, 22, 0.35);
+  --scrollbar-thumb: rgba(0, 229, 255, 0.28);
+  --scrollbar-thumb-hover: rgba(0, 229, 255, 0.44);
+
   /* ── 卡片标题基线 ─────────────────────────────── */
   --card-header-pad-x: 1rem;
 
@@ -339,11 +344,40 @@ textarea {
 .message:not(.user-message) .message-text pre {
   background: rgba(0, 0, 0, 0.6);
   color: var(--neon-green);
-  padding: 1rem;
+  padding: 1.05rem 1.1rem;
   overflow-x: auto;
   margin: 0.75rem 0;
   border: 1px solid rgba(0, 255, 157, 0.25);
   font-family: var(--font-mono);
+}
+
+.message:not(.user-message) .message-text pre::-webkit-scrollbar,
+.markdown-body pre::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+.message:not(.user-message) .message-text pre::-webkit-scrollbar-track,
+.markdown-body pre::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+
+.message:not(.user-message) .message-text pre::-webkit-scrollbar-thumb,
+.markdown-body pre::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 999px;
+  border: 1px solid rgba(0, 229, 255, 0.16);
+}
+
+.message:not(.user-message) .message-text pre::-webkit-scrollbar-thumb:hover,
+.markdown-body pre::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+.message:not(.user-message) .message-text pre,
+.markdown-body pre {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
 }
 
 .message:not(.user-message) .message-text code {

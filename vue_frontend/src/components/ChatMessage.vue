@@ -30,7 +30,10 @@
             @click="toggleAgentPanel"
             :aria-expanded="showAgentPanel"
           >
-            <span>VIEW TACTICAL ANALYSIS PROCESS</span>
+            <span class="title-with-cn">
+              <span>VIEW TACTICAL ANALYSIS PROCESS</span>
+              <span class="title-cn">战术分析过程</span>
+            </span>
             <ChevronDownIcon v-if="!showAgentPanel" class="icon-mini" />
             <ChevronUpIcon v-else class="icon-mini" />
           </button>
@@ -39,7 +42,10 @@
             <div class="agent-grid">
               <article class="agent-node">
                 <header class="agent-node__header">
-                  <span class="agent-node__name">RAG AGENT</span>
+                  <span class="agent-node__title">
+                    <span class="agent-node__name">RAG AGENT</span>
+                    <span class="agent-node__name-cn">数据库检索智能体</span>
+                  </span>
                   <span class="agent-node__status" :class="statusClass(agentDataSafe.rag.status)">
                     {{ formatAgentStatus(agentDataSafe.rag.status) }}
                   </span>
@@ -54,7 +60,10 @@
 
               <article class="agent-node">
                 <header class="agent-node__header">
-                  <span class="agent-node__name">WEB AGENT</span>
+                  <span class="agent-node__title">
+                    <span class="agent-node__name">WEB AGENT</span>
+                    <span class="agent-node__name-cn">联网检索智能体</span>
+                  </span>
                   <span class="agent-node__status" :class="statusClass(agentDataSafe.web.status)">
                     {{ formatAgentStatus(agentDataSafe.web.status) }}
                   </span>
@@ -70,7 +79,25 @@
           </div>
         </section>
 
+        <section v-if="isMultiAgent" class="synthesis-panel">
+          <header class="synthesis-panel__header">
+            <span class="synthesis-panel__name-wrap">
+              <span class="synthesis-panel__name">SYNTHESIS AGENT</span>
+              <span class="synthesis-panel__name-cn">综合智能体</span>
+            </span>
+            <span class="synthesis-panel__status-wrap">
+              <span class="synthesis-panel__status">FINAL OUTPUT</span>
+            </span>
+          </header>
+          <div
+            class="synthesis-panel__content terminal-text markdown-body message-markdown synthesis-markdown"
+            v-html="renderedContent"
+            @click="onMarkdownClick"
+          ></div>
+        </section>
+
         <div
+          v-else
           class="terminal-text markdown-body message-markdown"
           v-html="renderedContent"
           @click="onMarkdownClick"
@@ -371,7 +398,11 @@ const formatTime = (date) => {
 .terminal-message {
   position: relative;
   border-left: 2px solid var(--border-dim); /* 加粗左侧边框线 */
-  padding: 1.5rem 3rem 1.5rem;
+  padding: 1.2rem 1.5rem 1.5rem;
+  width: 100%;
+  box-sizing: border-box;
+  max-width: 1250px;
+  margin: 0 auto;
   background: linear-gradient(90deg, rgba(0, 229, 255, 0.08) 0%, rgba(0, 229, 255, 0.02) 25%, transparent 100%);
   clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
   transition: background 0.2s ease, border-left-color 0.2s ease;
@@ -471,7 +502,7 @@ const formatTime = (date) => {
 }
 
 .agent-accordion {
-  margin: 0 0 2rem;
+  margin: 0.15rem 0 2.35rem;
   border: 1px solid var(--border-dim);
   background: linear-gradient(90deg, rgba(0, 229, 255, 0.08) 0%, rgba(0, 229, 255, 0.03) 52%, rgba(0, 0, 0, 0.16) 100%);
 }
@@ -492,6 +523,18 @@ const formatTime = (date) => {
   padding: 0.4rem 0.52rem;
   cursor: pointer;
   text-align: left;
+}
+
+.title-with-cn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.title-cn {
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  color: rgba(143, 232, 255, 0.9);
 }
 
 .agent-accordion__body {
@@ -526,6 +569,20 @@ const formatTime = (date) => {
   color: var(--text-secondary);
 }
 
+.agent-node__title {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.38rem;
+  min-width: 0;
+}
+
+.agent-node__name-cn {
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  letter-spacing: 0.06em;
+  color: rgba(143, 232, 255, 0.82);
+}
+
 .agent-node__status {
   font-family: var(--font-ui);
   font-size: 0.56rem;
@@ -550,19 +607,19 @@ const formatTime = (date) => {
 
 .agent-node__content {
   margin: 0;
-  padding: 1rem 1.5rem;
+  padding: 1rem 1.1rem 1.1rem;
   max-height: 400px;
   overflow: auto;
   font-family: var(--font-ui);
-  font-size: 1rem;
-  line-height: 1.55;
+  font-size: 0.85rem;
+  line-height: 1.45;
   color: #8fe8ff;
 }
 
 .agent-node__content :deep(p),
 .agent-node__content :deep(li) {
-  font-size: 1rem;
-  margin-bottom: 0.4rem;
+  font-size: 0.85rem;
+  margin-bottom: 0.3rem;
 }
 
 .agent-node__error {
@@ -577,14 +634,92 @@ const formatTime = (date) => {
   word-break: break-word;
 }
 
+.synthesis-panel {
+  margin: 0.15rem 0 0;
+  border: 1px solid rgba(67, 243, 162, 0.3);
+  background: linear-gradient(90deg, rgba(67, 243, 162, 0.09) 0%, rgba(67, 243, 162, 0.03) 55%, rgba(0, 0, 0, 0.16) 100%);
+}
+
+.synthesis-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem;
+  padding: 0.45rem 0.62rem;
+  border-bottom: 1px solid rgba(67, 243, 162, 0.22);
+  background: rgba(2, 20, 16, 0.45);
+}
+
+.synthesis-panel__name,
+.synthesis-panel__status {
+  font-family: var(--font-ui);
+  letter-spacing: 0.08em;
+}
+
+.synthesis-panel__name-wrap,
+.synthesis-panel__status-wrap {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.36rem;
+}
+
+.synthesis-panel__name {
+  font-size: 0.8rem;
+  color: #90ffd2;
+}
+
+.synthesis-panel__status {
+  font-size: 0.8rem;
+  color: var(--neon-green);
+}
+
+.synthesis-panel__name-cn{
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  letter-spacing: 0.06em;
+  color: rgba(144, 255, 210, 0.86);
+}
+
+.synthesis-panel__content {
+  padding: 0.8rem 0.95rem 0.9rem;
+  color: #c6ffe6;
+}
+
 .terminal-text {
   margin: 0;
   font-family: var(--font-ui);
-  font-size: 1rem;
-  line-height: 1.8;
+  font-size: 0.95rem;
+  line-height: 1.72;
   color: #e5b8b8; /* 柔和的灰青色替代高亮青色 */
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.terminal-message--ai .terminal-message__body > .message-markdown :deep(p),
+.terminal-message--ai .terminal-message__body > .message-markdown :deep(li),
+.terminal-message--ai .terminal-message__body > .message-markdown :deep(blockquote) {
+  max-width: 72ch;
+}
+
+.synthesis-markdown :deep(p),
+.synthesis-markdown :deep(li),
+.synthesis-markdown :deep(blockquote) {
+  max-width: 72ch;
+}
+
+.synthesis-markdown :deep(pre),
+.synthesis-markdown :deep(.code-block-wrapper pre) {
+  overflow-x: hidden;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.synthesis-markdown :deep(pre code),
+.synthesis-markdown :deep(pre code.hljs) {
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .terminal-message--user .terminal-text {
@@ -656,8 +791,8 @@ const formatTime = (date) => {
 
 :deep(.markdown-body) {
   font-family: var(--font-ui);
-  font-size: 1rem;
-  line-height: 1.8;
+  font-size: 0.95rem;
+  line-height: 1.72;
   color: var(--neon-cyan);
   word-break: break-word;
 }
@@ -709,7 +844,7 @@ const formatTime = (date) => {
 .message-markdown :deep(.code-block-wrapper pre) {
   background: #0f172a !important;
   border: 1px solid rgba(0, 229, 255, 0.22) !important;
-  padding: 2rem 0.9rem 0.9rem;
+  padding: 2.2rem 1rem 1rem;
   overflow-x: auto;
   margin: 0;
   border-radius: 4px;
@@ -718,10 +853,24 @@ const formatTime = (date) => {
 .message-markdown :deep(pre) {
   background: #0f172a !important;
   border: 1px solid rgba(0, 229, 255, 0.22) !important;
-  padding: 0.9rem;
+  padding: 1rem 1rem 0.95rem;
   overflow-x: auto;
   margin: 0.6rem 0;
   border-radius: 4px;
+}
+
+.agent-node__content :deep(pre) {
+  overflow-x: hidden;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.agent-node__content :deep(pre code),
+.agent-node__content :deep(pre code.hljs) {
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .message-markdown :deep(pre code),
@@ -748,10 +897,43 @@ const formatTime = (date) => {
 :deep(.markdown-body pre) {
   background: rgba(3, 8, 18, 0.6);
   border: 1px solid rgba(0, 229, 255, 0.2);
-  padding: 0.9rem;
+  padding: 1rem;
   overflow-x: auto;
   margin: 0.6rem 0;
   border-radius: 4px; /* 代码块允许轻微圆角，与终端整体风格不冲突且更易读 */
+}
+
+.agent-node__content::-webkit-scrollbar,
+.message-markdown :deep(pre::-webkit-scrollbar),
+.message-markdown :deep(.agent-node__content::-webkit-scrollbar) {
+  width: 7px;
+  height: 7px;
+}
+
+.agent-node__content::-webkit-scrollbar-track,
+.message-markdown :deep(pre::-webkit-scrollbar-track),
+.message-markdown :deep(.agent-node__content::-webkit-scrollbar-track) {
+  background: rgba(2, 8, 22, 0.35);
+}
+
+.agent-node__content::-webkit-scrollbar-thumb,
+.message-markdown :deep(pre::-webkit-scrollbar-thumb),
+.message-markdown :deep(.agent-node__content::-webkit-scrollbar-thumb) {
+  background: rgba(0, 229, 255, 0.28);
+  border: 1px solid rgba(0, 229, 255, 0.18);
+  border-radius: 999px;
+}
+
+.agent-node__content::-webkit-scrollbar-thumb:hover,
+.message-markdown :deep(pre::-webkit-scrollbar-thumb:hover),
+.message-markdown :deep(.agent-node__content::-webkit-scrollbar-thumb:hover) {
+  background: rgba(0, 229, 255, 0.42);
+}
+
+.agent-node__content,
+.message-markdown :deep(pre) {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 229, 255, 0.32) rgba(2, 8, 22, 0.28);
 }
 
 :deep(.markdown-body code) {
@@ -812,7 +994,19 @@ const formatTime = (date) => {
   }
 
   .terminal-text {
-    font-size: 0.8rem;
+    font-size: 0.82rem;
+  }
+
+  :deep(.markdown-body) {
+    font-size: 0.85rem;
+    line-height: 1.65;
+  }
+
+  .agent-node__content,
+  .agent-node__content :deep(p),
+  .agent-node__content :deep(li) {
+    font-size: 0.78rem;
+    line-height: 1.4;
   }
 
   .terminal-message__meta {

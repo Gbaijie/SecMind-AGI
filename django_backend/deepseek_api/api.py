@@ -187,16 +187,35 @@ def _build_multi_agent_config(base_llm: LlmConfig, agent_cfgs: dict) -> MultiAge
     )
 
 
-def _render_context(history_for_llm, user_input: str, final_reply: str) -> str:
+def _serialize_multi_agent_meta(agent_meta: dict | None) -> str:
+    if not isinstance(agent_meta, dict) or not agent_meta:
+        return ""
+
+    try:
+        payload = json.dumps(agent_meta, ensure_ascii=False, separators=(",", ":"))
+    except TypeError:
+        return ""
+
+    return f"【MULTI_AGENT_META】{payload}【/MULTI_AGENT_META】"
+
+
+def _render_context(history_for_llm, user_input: str, final_reply: str, current_agent_meta: dict | None = None) -> str:
     lines = []
     for msg in history_for_llm:
         if msg.get("role") == "user":
             lines.append(f"用户：{msg.get('content', '')}")
         elif msg.get("role") == "assistant":
             lines.append(f"回复：{msg.get('content', '')}")
+            agent_meta = msg.get("agent_meta")
+            meta_line = _serialize_multi_agent_meta(agent_meta)
+            if meta_line:
+                lines.append(meta_line)
 
     lines.append(f"用户：{user_input}")
     lines.append(f"回复：{final_reply}")
+    meta_line = _serialize_multi_agent_meta(current_agent_meta)
+    if meta_line:
+        lines.append(meta_line)
     return "\n".join(lines).strip()
 
 
@@ -314,6 +333,27 @@ def chat(request, data: ChatIn):
 
     def stream_generator() -> Generator[str, None, None]:
         full_clean_reply = ""
+        agent_state = {
+            "rag": {"status": "idle", "content": "", "error": "", "errorDetail": None},
+            "web": {"status": "idle", "content": "", "error": "", "errorDetail": None},
+        }
+
+        def _update_agent_state_from_event(evt: dict) -> None:
+            agent_id = evt.get("agent_id")
+            if agent_id not in agent_state:
+                return
+
+            if evt.get("type") == "agent_chunk":
+                agent_state[agent_id]["content"] += evt.get("content", evt.get("chunk", "")) or ""
+                return
+
+            if evt.get("type") == "agent_status":
+                agent_state[agent_id]["status"] = evt.get("status") or agent_state[agent_id]["status"]
+                if evt.get("status") == "error":
+                    agent_state[agent_id]["error"] = evt.get("error") or evt.get("message") or ""
+                    agent_state[agent_id]["errorDetail"] = evt.get("error_detail")
+                elif evt.get("status") == "done" and not agent_state[agent_id]["error"]:
+                    agent_state[agent_id]["errorDetail"] = None
 
         try:
             if mode != "multi_agent":
@@ -356,6 +396,7 @@ def chat(request, data: ChatIn):
                     ),
                     cfg,
                 ):
+                    _update_agent_state_from_event(evt)
                     yield _sse_line(evt)
                     if evt.get("type") == "agent_chunk" and evt.get("agent_id") == "synthesis":
                         full_clean_reply += evt.get("content", "")
@@ -365,11 +406,18 @@ def chat(request, data: ChatIn):
                 logger.warning("会话 %s 未收到有效模型输出，跳过写入", session_id)
                 return
 
+            current_agent_meta = None
+            if mode == "multi_agent":
+                current_agent_meta = agent_state
+
             if data.context is not None or is_regeneration:
-                session.context = _render_context(history_for_llm, user_input, final_save)
+                session.context = _render_context(history_for_llm, user_input, final_save, current_agent_meta)
                 session.save()
             else:
-                session.update_context(user_input, final_save)
+                if current_agent_meta:
+                    session.update_context(user_input, f"{final_save}\n{_serialize_multi_agent_meta(current_agent_meta)}")
+                else:
+                    session.update_context(user_input, final_save)
 
             logger.info("会话 %s 已更新 (用户: %s)", session_id, user.user)
         except Exception as e:

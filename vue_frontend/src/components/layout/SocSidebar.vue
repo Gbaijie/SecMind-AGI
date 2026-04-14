@@ -24,7 +24,7 @@
     </template>
 
     <template v-if="!collapsed">
-      <button type="button" class="session-create-bar" @click="$emit('create-session', `新会话 ${Date.now()}`)">
+      <button type="button" class="session-create-bar" @click="$emit('create-session')">
         <PlusIcon class="session-create-bar__icon" />
         <span class="session-create-bar__text">NEW SESSION...</span>
       </button>

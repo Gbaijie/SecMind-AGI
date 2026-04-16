@@ -432,6 +432,10 @@ export default {
     return axiosApi.post('/test_connection', data);
   },
 
+  getRuntimeConfig() {
+    return axiosApi.get('/runtime-config');
+  },
+
   createEmbeddings(data) {
     return axiosApi.post('/embeddings', data);
   },

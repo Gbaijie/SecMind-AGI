@@ -30,6 +30,7 @@ from .schemas import (
     HistoryOut,
     LoginIn,
     LoginOut,
+    RuntimeConfigOut,
     SessionListOut,
     SessionRenameIn,
 )
@@ -161,6 +162,22 @@ def test_connection(request, data: TestConnectionIn):
 
     except requests.exceptions.RequestException as e:
         return 408, {"error": f"网络不可达或超时，请检查服务器网络或代理设置"}
+
+
+@router.get("/runtime-config", response={200: RuntimeConfigOut, 401: ErrorResponse})
+def runtime_config(request):
+    if not request.auth:
+        return 401, {"error": "请先登录获取API Key"}
+
+    provider_api_keys = {
+        provider: services.resolve_provider_api_key(provider, None) or ""
+        for provider in services.PROVIDER_API_KEY_ENV
+    }
+
+    return {
+        "provider_api_keys": provider_api_keys,
+        "web_search_api_key": services.resolve_web_search_api_key(None) or "",
+    }
 
 
 @router.post("/embeddings", response={200: dict, 400: ErrorResponse})

@@ -12,6 +12,11 @@ class LoginOut(Schema):
     expiry: int
 
 
+class RuntimeConfigOut(Schema):
+    provider_api_keys: Dict[str, Optional[str]]
+    web_search_api_key: Optional[str] = None
+
+
 class ChatIn(Schema):
     session_id: str = "默认对话"
     user_input: str

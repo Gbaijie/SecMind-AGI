@@ -39,6 +39,9 @@ export const useAppStore = defineStore('app', {
     embeddingModel: DEFAULT_EMBEDDING_MODEL,
     providerApiKey: DEFAULT_PROVIDER_API_KEY,
     webSearchApiKey: DEFAULT_WEB_SEARCH_API_KEY,
+    runtimeProviderApiKeys: {},
+    runtimeWebSearchApiKey: '',
+    runtimeConfigLoaded: false,
   }),
 
   actions: {
@@ -79,6 +82,7 @@ export const useAppStore = defineStore('app', {
     setLlmProvider(provider) {
       this.llmProvider = provider
       localStorage.setItem('llmProvider', provider)
+      this.applyRuntimeSensitiveDefaults()
     },
 
     setLlmModel(model) {
@@ -120,9 +124,37 @@ export const useAppStore = defineStore('app', {
       sessionStorage.removeItem('webSearchApiKey')
     },
 
+    applyRuntimeSensitiveDefaults() {
+      const providerDefaultKey = this.runtimeProviderApiKeys?.[this.llmProvider] || ''
+      if (!this.providerApiKey && providerDefaultKey) {
+        this.setProviderApiKey(providerDefaultKey)
+      }
+
+      if (!this.webSearchApiKey && this.runtimeWebSearchApiKey) {
+        this.setWebSearchApiKey(this.runtimeWebSearchApiKey)
+      }
+    },
+
+    hydrateRuntimeConfig(runtimeConfig) {
+      const providerApiKeys = runtimeConfig?.provider_api_keys || {}
+      this.runtimeProviderApiKeys = providerApiKeys
+      this.runtimeWebSearchApiKey = runtimeConfig?.web_search_api_key || ''
+      this.applyRuntimeSensitiveDefaults()
+      this.runtimeConfigLoaded = true
+    },
+
+    async syncRuntimeConfig(apiClient) {
+      if (this.runtimeConfigLoaded) return
+      const response = await apiClient.getRuntimeConfig()
+      this.hydrateRuntimeConfig(response?.data)
+    },
+
     clearSensitiveKeys() {
       this.clearProviderApiKey()
       this.clearWebSearchApiKey()
+      this.runtimeProviderApiKeys = {}
+      this.runtimeWebSearchApiKey = ''
+      this.runtimeConfigLoaded = false
     },
   },
 })

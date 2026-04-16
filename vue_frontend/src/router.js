@@ -5,7 +5,9 @@
  */
 
 import { createRouter, createWebHistory } from 'vue-router'
+import api from './api'
 import { useAuthStore } from './stores/authStore'
+import { useAppStore } from './stores/appStore'
 
 const Login = () => import('./views/Login.vue')
 const GlobalLayout = () => import('./layouts/GlobalLayout.vue')
@@ -62,10 +64,19 @@ const router = createRouter({
   routes,
 })
 
-router.beforeEach((to) => {
+router.beforeEach(async (to) => {
   const authStore = useAuthStore()
+  const appStore = useAppStore()
   authStore.syncFromStorage()
   const requiresAuth = to.matched.some((record) => record.meta.requiresAuth)
+
+  if (authStore.isAuthenticated && !appStore.runtimeConfigLoaded) {
+    try {
+      await appStore.syncRuntimeConfig(api)
+    } catch {
+      // ignore runtime config hydration failures
+    }
+  }
 
   if (to.path === '/login' && authStore.isAuthenticated) {
     return '/dashboard'

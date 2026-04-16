@@ -192,7 +192,6 @@ const buildOption = () => {
   const allTagNames = tagSeries.map((item) => item.name)
   const legendData = fullscreen ? [...mainCategoryNames, ...allTagNames] : mainCategoryNames
 
-  // 图例分屏排布逻辑
   const mid = Math.ceil(legendData.length / 2)
   const leftLegend = legendData.slice(0, mid)
   const rightLegend = legendData.slice(mid)
@@ -236,14 +235,20 @@ const buildOption = () => {
           data: rightLegend,
         },
       ]
-    : {
-        ...sharedLegendConfig,
-        orient: 'horizontal',
-        left: 'center',
-        bottom: 10,
-        width: '94%',
-        data: legendData,
-      }
+    : [
+        {
+          ...sharedLegendConfig,
+          orient: 'horizontal',
+          left: 'center',
+          bottom: 10,
+          width: '94%',
+          data: legendData,
+        },
+        {
+          show: false, // 显式隐藏以清除幽灵图例占位
+          data: [],
+        }
+      ]
 
   return {
     backgroundColor: 'transparent',
@@ -347,7 +352,6 @@ const buildOption = () => {
         labelLine: { show: false },
         data: buildGearSegments(),
       },
-      // 新增：内圈彗星光效
       {
         id: 'innerCometNode',
         name: 'Inner Comet',
@@ -503,7 +507,7 @@ const emit = defineEmits(['chart-click'])
 
 const { chartRef, setPartialOption } = useEcharts(buildOption, () => [props.stats, props.fullscreen], {
   deep: false,
-  throttleMs: 40, // 降低节流阈值以匹配更高帧率动画
+  throttleMs: 40, 
   debounceMs: 150,
   onMouseOver: (params) => {
     if (!isInteractiveCategoryHit(params)) return
@@ -560,7 +564,7 @@ const resumeOrbit = () => {
           { id: 'innerCometNode', startAngle: orbitPhase.value * 3 },
         ],
       })
-    }, 40) // 从120ms缩短到40ms (~25fps) 使动态更流畅
+    }, 40)
   }
 }
 
@@ -573,7 +577,6 @@ watch(
     if (orbitResumeTimer) clearTimeout(orbitResumeTimer)
     if (initialRenderTimer) clearTimeout(initialRenderTimer)
 
-    // 缓存实例后缩短恢复等待
     initialRenderTimer = setTimeout(() => {
       resumeOrbit()
     }, 800)
@@ -606,6 +609,7 @@ onBeforeUnmount(() => {
   position: relative;
   width: 100%;
   height: 100%;
+  overflow: hidden; 
 }
 
 .chart-canvas {

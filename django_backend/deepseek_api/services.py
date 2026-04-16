@@ -2,6 +2,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import threading
 import time
 import datetime
@@ -17,6 +18,7 @@ import requests
 
 from topklogsystem import TopKLogSystem
 from .models import APIKey, RateLimit, ConversationSession
+from .query_service import get_query_record_detail, list_query_records
 
 logger = logging.getLogger(__name__)
 
@@ -387,6 +389,167 @@ def _raise_openai_compatible_error(provider: str, model: str, exc: Exception) ->
     raise ProviderHttpError(detail.get("message") or str(exc), detail) from exc
 
 
+def retrieve_logs_remote_mode(prompt: str, top_k: int = 5) -> List[Dict[str, Any]]:
+    """远程模式复用本地检索策略：候选召回 -> 同权重重排 -> 证据链聚合。"""
+    if log_system is None:
+        return []
+
+    limit = max(int(top_k or 5), 1)
+    query_signals = log_system._extract_query_signals(prompt)
+    query_terms = log_system._build_query_terms(prompt)
+
+    raw_prompt = (prompt or "").strip()
+    token_candidates = re.findall(r"[A-Za-z0-9_.:/-]+|[\u4e00-\u9fff]{2,}", raw_prompt)
+    stop_tokens = {
+        "怎么办",
+        "如何",
+        "怎么",
+        "为什么",
+        "请问",
+        "简短",
+        "回答",
+    }
+
+    primary_queries: List[str] = []
+    if raw_prompt:
+        primary_queries.append(raw_prompt)
+    for token in token_candidates:
+        normalized = token.strip().lower()
+        if not normalized or normalized in stop_tokens:
+            continue
+        if normalized not in primary_queries:
+            primary_queries.append(normalized)
+        if re.fullmatch(r"[\u4e00-\u9fff]{4,}", normalized):
+            for size in (2, 3):
+                upper_bound = len(normalized) - size + 1
+                for start in range(max(upper_bound, 0)):
+                    fragment = normalized[start : start + size]
+                    if fragment in stop_tokens:
+                        continue
+                    if fragment not in primary_queries:
+                        primary_queries.append(fragment)
+
+    if not primary_queries:
+        primary_queries = [""]
+
+    exact_filters: List[Dict[str, Any]] = []
+    for cve_id in query_signals.get("cve_ids", []):
+        exact_filters.append({"cve_id": cve_id})
+    for mitre_id in query_signals.get("mitre_ids", []):
+        exact_filters.append({"mitre_attack_id": mitre_id})
+    for ip_value in query_signals.get("ip_addresses", []):
+        exact_filters.append({"ioc_value": ip_value})
+
+    def build_candidate_map(queries: List[str], relaxed: bool = False) -> Dict[str, Dict[str, Any]]:
+        fetch_size = max(limit * 8, 40) if relaxed else max(limit * 4, 20)
+        candidate_map: Dict[str, Dict[str, Any]] = {}
+
+        def upsert_candidate(
+            item: Dict[str, Any],
+            force_exact: bool = False,
+        ) -> None:
+            record_id = str(item.get("record_id") or "").strip()
+            detail = get_query_record_detail(record_id) if record_id else None
+            detail_payload = detail or {}
+            metadata = detail_payload.get("metadata") or {}
+            content = (
+                detail_payload.get("search_content")
+                or item.get("search_content")
+                or ""
+            ).strip()
+            if not content:
+                return
+
+            key = str(
+                metadata.get("raw_content_hash")
+                or metadata.get("_id")
+                or record_id
+                or content
+            )
+            candidate = candidate_map.setdefault(
+                key,
+                {
+                    "content": content,
+                    "metadata": metadata,
+                    "vector_score": 0.0,
+                    "keyword_score": 0.0,
+                    "channels": set(),
+                },
+            )
+
+            if force_exact:
+                candidate["vector_score"] = max(float(candidate["vector_score"]), 1.0)
+                candidate["keyword_score"] = max(float(candidate["keyword_score"]), 1.0)
+                candidate["channels"].add("exact_metadata")
+                return
+
+            keyword_score = log_system._score_keyword_match(
+                candidate["content"],
+                candidate["metadata"],
+                query_terms,
+                query_signals.get("exact_terms", []),
+            )
+            candidate["keyword_score"] = max(float(candidate["keyword_score"]), float(keyword_score))
+            if keyword_score > 0:
+                candidate["channels"].add("keyword")
+
+        for filter_item in exact_filters:
+            payload = list_query_records(
+                query="",
+                page=1,
+                page_size=fetch_size,
+                filters=filter_item,
+                start_time="",
+                end_time="",
+                sort_by="fetched_at",
+                sort_order="desc",
+            )
+            for result_item in payload.get("items") or []:
+                upsert_candidate(result_item, force_exact=True)
+
+        for query_text in queries:
+            payload = list_query_records(
+                query=query_text,
+                page=1,
+                page_size=fetch_size,
+                filters={},
+                start_time="",
+                end_time="",
+                sort_by="fetched_at",
+                sort_order="desc",
+            )
+            for result_item in payload.get("items") or []:
+                upsert_candidate(result_item, force_exact=False)
+
+        return candidate_map
+
+    primary_candidates = build_candidate_map(primary_queries, relaxed=False)
+    ranked_items = log_system._rank_candidates(primary_candidates, query_signals)
+
+    best_score = ranked_items[0]["score"] if ranked_items else 0.0
+    if not ranked_items or best_score < 0.35:
+        relaxed_queries = list(primary_queries)
+        if "" not in relaxed_queries:
+            relaxed_queries.append("")
+        relaxed_candidates = build_candidate_map(relaxed_queries, relaxed=True)
+        relaxed_ranked_items = log_system._rank_candidates(relaxed_candidates, query_signals)
+        relaxed_best = relaxed_ranked_items[0]["score"] if relaxed_ranked_items else 0.0
+        if relaxed_ranked_items and (
+            not ranked_items
+            or relaxed_best > best_score
+            or len(relaxed_ranked_items) > len(ranked_items)
+        ):
+            ranked_items = relaxed_ranked_items
+
+    grouped_items = log_system._group_retrieval_results(ranked_items)
+    for item in grouped_items:
+        raw_source = str(item.get("source") or "")
+        item["source"] = (
+            f"remote_{raw_source}" if raw_source else "remote_keyword"
+        )
+    return grouped_items[:limit]
+
+
 def web_search(
     query: str,
     max_results: int = 3,
@@ -748,7 +911,11 @@ def model_api_call(
                 logger.warning("log_system 未初始化，跳过数据库日志检索。")
             else:
                 logger.info(f"执行数据库日志检索: {prompt}")
-                log_results = log_system.retrieve_logs(prompt, top_k=5)
+                if resolved_embedding_mode == "siliconflow":
+                    logger.info("当前为远程 embedding 模式，使用关键词检索路径。")
+                    log_results = retrieve_logs_remote_mode(prompt, top_k=5)
+                else:
+                    log_results = log_system.retrieve_logs(prompt, top_k=5)
                 logger.info(f"针对查询 '{prompt}' 的 Top-K 检索结果：")
                 for index, result in enumerate(log_results, start=1):
                     metadata = result.get("metadata", {}) or {}

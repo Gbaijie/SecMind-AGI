@@ -18,8 +18,8 @@ const readSensitiveValue = (key) => {
   return legacyValue
 }
 
-const DEFAULT_PROVIDER = localStorage.getItem('llmProvider') || 'ollama'
-const DEFAULT_MODEL = localStorage.getItem('llmModel') || 'DeepSeek-R1:7b'
+const DEFAULT_PROVIDER = localStorage.getItem('llmProvider') || 'siliconflow'
+const DEFAULT_MODEL = localStorage.getItem('llmModel') || 'DeepSeek-V3.2'
 const DEFAULT_EMBEDDING_MODE = localStorage.getItem('embeddingMode') || 'local'
 const DEFAULT_EMBEDDING_MODEL = localStorage.getItem('embeddingModel') || 'qwen3-embedding:4b'
 const DEFAULT_PROVIDER_API_KEY = readSensitiveValue('providerApiKey')

@@ -160,14 +160,14 @@ const attachmentText = ref('')
 const attachmentName = ref('')
 const isMultiAgentEnabled = ref(false)
 
-const normalizedProvider = computed(() => (appStore.llmProvider || 'ollama').trim().toLowerCase())
+const normalizedProvider = computed(() => (appStore.llmProvider || 'siliconflow').trim().toLowerCase())
 
 const providerModelOptions = computed(() => {
   const options = PROVIDER_MODEL_CANDIDATES[normalizedProvider.value]
   if (Array.isArray(options) && options.length > 0) {
     return options
   }
-  return [appStore.llmModel || 'DeepSeek-R1:7b']
+  return [appStore.llmModel || 'DeepSeek-V3.2']
 })
 
 const modelSelectOptions = computed(() => providerModelOptions.value.map((model) => ({ label: model, value: model })))
@@ -177,7 +177,7 @@ const resolvePreferredModel = () => {
   if (preferred && providerModelOptions.value.includes(preferred)) {
     return preferred
   }
-  return providerModelOptions.value[0] || 'DeepSeek-R1:7b'
+  return providerModelOptions.value[0] || 'DeepSeek-V3.2'
 }
 
 const multiAgentModels = ref({

@@ -5,7 +5,7 @@ DeepSOC 是一个面向网络安全日志分析场景的 SOC（Security Operatio
 - 后端：Django + django-ninja + ChromaDB + LlamaIndex + OpenAI-compatible LLM 路由
 - 前端：Vue 3 + Pinia + Naive UI + ECharts + Three.js
 
-当前版本已具备比赛可演示的完整链路：登录鉴权、流式分析、会话管理、附件解析、结构化检索、多智能体协同、态势看板与情报查询。
+当前版本已具备比赛可演示的完整链路：登录鉴权、流式分析、会话管理、附件解析、结构化检索、多智能体协同、态势看板与情报查询，并支持本地/远程 embedding 切换与流式 Markdown 结果展示。
 
 ---
 
@@ -29,10 +29,12 @@ DeepSOC 是一个面向网络安全日志分析场景的 SOC（Security Operatio
 - 支持“编辑最近一条用户消息后重问”与“重新生成最后一轮回复”。
 - 文件附件解析：支持 .txt、.docx、.xlsx。
 - 本地知识库检索（TopKLogSystem）+ 可选联网检索（博查 Web Search API）。
+- 检索向量化支持 local / siliconflow 两种 embedding 模式，并可在设置页切换模型。
 - 模型路由已实现：ollama、openai、deepseek、minimax、siliconflow。
 - OpenAI-compatible 错误结构化透传：provider、model、status_code、error_code、message、request_id。
 - 仪表盘聚合接口直接读取 django_backend/data/log 下的 JSONL 数据。
 - 提供健康检查 /api/health 与就绪检查 /api/ready。
+- 提供运行时配置接口 /api/runtime-config 与远程 embedding 接口 /api/embeddings。
 - 提供连通性测试接口 /api/test_connection（provider/search 两类测试）。
 
 ### 2.2 检索与证据链能力
@@ -51,8 +53,9 @@ DeepSOC 是一个面向网络安全日志分析场景的 SOC（Security Operatio
 - 全局布局：侧边导航 + 顶部态势栏 + 主内容区。
 - 分析终端：会话创建/切换/搜索/重命名/删除/清空、流式消息、附件输入、多智能体过程展示。
 - 消息操作：复制、编辑最近一条用户消息、重新生成。
+- 消息展示：支持 Markdown 渲染、代码块一键复制、多智能体过程面板与停止生成。
 - 仪表盘：拓扑图、威胁雷达、日志流入、分类分布、全屏下钻并跳转分析终端。
-- 设置页：Provider/模型/API Key 配置、连通性探测、会话 HTML 导出、退出登录。
+- 设置页：Provider/模型/API Key、Embedding 模式/模型、连通性探测、会话 HTML 导出、退出登录。
 - 状态持久化：Pinia + localStorage（登录态、会话草稿、模型配置、导出目标等）。
 
 ### 2.4 情报查询页（IntelQuery）
@@ -94,7 +97,9 @@ DeepSOC 是一个面向网络安全日志分析场景的 SOC（Security Operatio
 | /api/login | POST | 登录并签发 API Key |
 | /api/health | GET | 进程存活检查 |
 | /api/ready | GET | 就绪检查（DB + 向量检索组件） |
+| /api/runtime-config | GET | 运行时敏感配置自动回填 |
 | /api/test_connection | POST | 连通性测试（provider/search） |
+| /api/embeddings | POST | 远程 embedding 生成（siliconflow） |
 | /api/chat | POST | 流式问答（SSE），支持 single / multi_agent |
 | /api/sessions | GET | 获取当前用户会话列表（按最近更新时间） |
 | /api/history | GET | 获取指定会话历史（session_id） |
@@ -116,7 +121,7 @@ DeepSOC 是一个面向网络安全日志分析场景的 SOC（Security Operatio
   - 回复：yyy
 - 多智能体元信息以标记块写入上下文：
   - 【MULTI_AGENT_META】...【/MULTI_AGENT_META】
-- 后端可将上下文解析为结构化 history，供再生成和前端历史展示。
+- 后端可将上下文解析为结构化 history，前端恢复时会保留多行内容并还原多智能体元信息，供再生成和历史展示。
 
 ### 4.3 检索系统 TopKLogSystem
 
@@ -127,6 +132,7 @@ DeepSOC 是一个面向网络安全日志分析场景的 SOC（Security Operatio
   - _id、db_type、risk_level、cve_id、ioc_value、source、confidence、raw_content_hash、mitre_attack_id、tags 等进入 metadata。
   - 自动补充 record_file、record_line。
 - 检索结果聚合优先级：cve_id -> ioc_value -> raw_content_hash -> tags -> db_type/source。
+- 模型配置支持 provider/model 与 embedding_mode/embedding_model 的组合传参与自动回填。
 
 ### 4.4 多智能体编排
 
@@ -145,6 +151,9 @@ DeepSOC 是一个面向网络安全日志分析场景的 SOC（Security Operatio
 - test_connection 支持：
   - provider: 对应厂商 models 接口或本地 Ollama tags。
   - search: 博查 web-search 接口。
+- embedding 支持：
+  - local: Ollama 本地 qwen3-embedding:4b。
+  - siliconflow: SiliconFlow 远程 Qwen/Qwen3-Embedding-8B。
 
 ---
 
@@ -178,8 +187,8 @@ DeepSOC 是一个面向网络安全日志分析场景的 SOC（Security Operatio
 ### 5.4 核心页面与组件机制
 
 - Chat：
-  - ChatInput 支持 DB/Web/Multi-Agent 开关与附件上传。
-  - useChatSession 统一处理 SSE 分发、agent 状态、编辑重问与再生成。
+  - ChatInput 支持 DB/Web/Multi-Agent 开关、附件上传，以及 multi-agent 下 RAG/WEB/SYNTHESIS 三路模型单独配置。
+  - useChatSession 统一处理 SSE 分发、agent 状态、编辑重问、再生成与停止生成。
   - 页面初始化优先调用 /api/sessions 同步会话列表，再加载当前会话历史。
 - Dashboard：
   - 拓扑 + 3 图联动，支持全屏、分析引导、跳转 Chat。
@@ -187,7 +196,8 @@ DeepSOC 是一个面向网络安全日志分析场景的 SOC（Security Operatio
 - IntelQuery：
   - useIntelQuery 统一处理筛选、分页、详情、导出与请求取消。
 - Settings：
-  - 模型配置、Provider/WebSearch Ping、会话导出、登出。
+  - 模型配置、Embedding 模式/模型、Provider/WebSearch Ping、会话导出、登出。
+  - 页面会优先使用 /api/runtime-config 回填服务器侧的默认 Key。
 
 ### 5.5 UI 规范与构建运行
 
@@ -225,13 +235,15 @@ DeepSOC 是一个面向网络安全日志分析场景的 SOC（Security Operatio
 
     {"type":"done"}
 
+- 说明：agent_status 会随执行阶段持续刷新，agent_chunk 用于增量拼接各智能体输出，error_detail 会保留结构化 Provider 错误信息。
+
 ### 6.2 单模型模式
 
 - 主要返回 content 分片事件：
 
     {"type":"content","chunk":"..."}
 
-- 异常返回 error 事件（包含 message 与兼容字段 chunk，可能附带 error_detail）。
+- 同时可能返回 think、metadata 与 error 事件，其中 think 用于推理过程，metadata 目前用于耗时信息，error 事件包含 message 与兼容字段 chunk，可能附带 error_detail。
 - 会话流尾统一返回 done 事件。
 
 ---
@@ -415,6 +427,8 @@ DeepSOC 是一个面向网络安全日志分析场景的 SOC（Security Operatio
 3. 进入系统设置页面：
    - Provider 选择 siliconflow。
    - Model 选择 DeepSeek-V3.2。
+  - Embedding 模式选择 local 或 siliconflow。
+  - 需要远程向量化时，将 Embedding 模型切换为 Qwen/Qwen3-Embedding-8B。
    - 填入 SiliconFlow API Key。
    - 填入博查 Web Search API Key
 

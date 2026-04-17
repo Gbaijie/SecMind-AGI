@@ -1343,6 +1343,16 @@ def list_user_sessions(user: APIKey) -> List[str]:
     return session_ids or ["默认对话"]
 
 
+def delete_conversation_session(user: APIKey, session_id: str) -> tuple[str, bool]:
+    """删除当前用户下指定会话，返回(标准化会话ID, 是否删除成功)。"""
+    normalized_session_id = (session_id or "").strip() or "默认对话"
+    deleted_count, _ = ConversationSession.objects.filter(
+        user=user,
+        session_id=normalized_session_id,
+    ).delete()
+    return normalized_session_id, deleted_count > 0
+
+
 def get_cached_reply(prompt: str, session_id: str, user: APIKey) -> str | None:
     """缓存键包含 session_id 和 user，避免跨会话冲突"""
     cache_key = f"reply:{user.user}:{session_id}:{hash(prompt)}"

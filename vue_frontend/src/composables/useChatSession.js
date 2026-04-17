@@ -29,7 +29,13 @@ function formatProviderError(detail, fallbackMessage = '流式响应出错') {
   return `[${provider}/${model}] ${status}${code}: ${message}`
 }
 
-export function useChatSession({ apiClient, messagesContainerRef, chatInputRef }) {
+export function useChatSession({
+  apiClient,
+  messagesContainerRef,
+  chatInputRef,
+  onConfirmDeleteSession,
+  onConfirmClearAllSessions,
+}) {
   const chatStore = useChatStore()
   const appStore = useAppStore()
   const authStore = useAuthStore()
@@ -154,7 +160,10 @@ export function useChatSession({ apiClient, messagesContainerRef, chatInputRef }
   }
 
   const handleDeleteSession = async (sessionId) => {
-    if (!window.confirm(`确定要删除会话 "${sessionId}" 吗？`)) return
+    const confirmed = onConfirmDeleteSession
+      ? await onConfirmDeleteSession(sessionId)
+      : window.confirm(`确定要删除会话 "${sessionId}" 吗？`)
+    if (!confirmed) return
 
     appStore.clearEditing()
 
@@ -162,7 +171,7 @@ export function useChatSession({ apiClient, messagesContainerRef, chatInputRef }
       chatStore.addSession('默认对话')
     }
 
-    await apiClient.clearHistory(sessionId)
+    await apiClient.deleteSession(sessionId)
     chatStore.removeSession(sessionId)
     chatStore.clearSessionMessages(sessionId)
     await loadHistory(chatStore.currentSession)
@@ -212,17 +221,17 @@ export function useChatSession({ apiClient, messagesContainerRef, chatInputRef }
   }
 
   const handleClearAllSessions = async () => {
-    if (
-      !window.confirm(
-        '确定要删除所有会话记录吗？此操作会清空左侧全部历史会话，并重建一个默认对话。',
-      )
-    ) {
+    const confirmed = onConfirmClearAllSessions
+      ? await onConfirmClearAllSessions()
+      : window.confirm('确定要删除所有会话记录吗？此操作会清空左侧全部历史会话，并重建一个默认对话。')
+
+    if (!confirmed) {
       return
     }
 
     appStore.clearEditing()
     const ids = [...sessions.value]
-    const results = await Promise.allSettled(ids.map((id) => apiClient.clearHistory(id)))
+    const results = await Promise.allSettled(ids.map((id) => apiClient.deleteSession(id)))
 
     const failed = []
     results.forEach((result, index) => {

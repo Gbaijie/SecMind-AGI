@@ -145,11 +145,11 @@ const tooltipStyle = computed(() => ({ left: `${tooltip.value.x}px`, top: `${too
 const legendStats = computed(() => topologyModel.value?.stats || { minWeight: 0, maxWeight: 0, renderedNodes: 0, totalNodes: 0, renderedLinks: 0, totalLinks: 0 })
 
 const riskFilters = [
-  { key: 'all',      label: 'ALL',      color: '#7fa8b6' },
+  { key: 'all',      label: 'ALL',      color: '#5ecbff' },
   { key: 'critical', label: 'CRITICAL', color: RISK_COLORS.critical },
   { key: 'high',     label: 'HIGH',     color: RISK_COLORS.high },
   { key: 'medium',   label: 'MEDIUM',   color: RISK_COLORS.medium },
-  { key: 'low',      label: 'LOW',      color: RISK_COLORS.low },
+  { key: 'low',      label: 'LOW',      color: '#8ea2ad' },
 ]
 const activeRiskFilter = ref('all')
 

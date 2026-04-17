@@ -58,13 +58,40 @@
       />
     </n-layout-content>
   </n-layout>
+
+  <n-modal
+    :show="sessionConfirm.show"
+    :mask-closable="true"
+    :auto-focus="false"
+    :show-icon="false"
+    @update:show="handleSessionConfirmVisibleChange"
+  >
+    <section class="session-confirm-modal" :class="`session-confirm-modal--${sessionConfirm.tone}`">
+      <header class="session-confirm-modal__header">
+        <AlertIcon class="session-confirm-modal__icon" />
+        <h3 class="session-confirm-modal__title">{{ sessionConfirm.title }}</h3>
+      </header>
+
+      <p class="session-confirm-modal__desc">{{ sessionConfirm.description }}</p>
+
+      <footer class="session-confirm-modal__actions">
+        <NButton class="session-confirm-modal__btn session-confirm-modal__btn--ghost" @click="closeSessionConfirm(false)">
+          {{ sessionConfirm.cancelText }}
+        </NButton>
+        <NButton class="session-confirm-modal__btn session-confirm-modal__btn--danger" @click="closeSessionConfirm(true)">
+          {{ sessionConfirm.confirmText }}
+        </NButton>
+      </footer>
+    </section>
+  </n-modal>
 </template>
 
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useChatStore } from '../stores/chatStore'
-import { NLayout, NLayoutContent, NLayoutSider } from 'naive-ui'
+import { NButton, NLayout, NLayoutContent, NLayoutSider, NModal } from 'naive-ui'
+import { AlertTriangleIcon as AlertIcon } from 'vue-tabler-icons'
 import api from '../api'
 import SocSidebar from '../components/layout/SocSidebar.vue'
 import { useChatSession } from '../composables/useChatSession'
@@ -79,6 +106,78 @@ const chatStore = useChatStore()
 const analysisJumpHint = ref('')
 const analysisJumpEntry = ref(null)
 const analysisJumpHistoryVisibleBySession = ref({})
+const sessionConfirm = ref({
+  show: false,
+  title: '',
+  description: '',
+  confirmText: '确认',
+  cancelText: '取消',
+  tone: 'blue',
+})
+
+let sessionConfirmResolver = null
+
+const openSessionConfirm = (options = {}) => {
+  if (sessionConfirmResolver) {
+    sessionConfirmResolver(false)
+    sessionConfirmResolver = null
+  }
+
+  return new Promise((resolve) => {
+    sessionConfirmResolver = resolve
+    sessionConfirm.value = {
+      show: true,
+      title: '',
+      description: '',
+      confirmText: '确认',
+      cancelText: '取消',
+      tone: 'blue',
+      ...options,
+    }
+  })
+}
+
+const closeSessionConfirm = (accepted = false) => {
+  if (!sessionConfirm.value.show && !sessionConfirmResolver) return
+
+  const resolver = sessionConfirmResolver
+  sessionConfirmResolver = null
+  sessionConfirm.value = {
+    ...sessionConfirm.value,
+    show: false,
+  }
+  resolver?.(Boolean(accepted))
+}
+
+const handleSessionConfirmVisibleChange = (nextShow) => {
+  if (nextShow) {
+    sessionConfirm.value = {
+      ...sessionConfirm.value,
+      show: true,
+    }
+    return
+  }
+
+  closeSessionConfirm(false)
+}
+
+const confirmDeleteSession = (sessionId) =>
+  openSessionConfirm({
+    title: '删除会话',
+    description: `会话“${sessionId}”将被永久删除，相关消息记录无法恢复。`,
+    confirmText: '删除会话',
+    cancelText: '保留会话',
+    tone: 'blue',
+  })
+
+const confirmClearAllSessions = () =>
+  openSessionConfirm({
+    title: '清空全部历史会话',
+    description: '清空全部历史会话，并重建一个默认对话。该操作不可恢复。',
+    confirmText: '确认清空',
+    cancelText: '取消操作',
+    tone: 'blue',
+  })
 
 const {
   searchQuery,
@@ -102,6 +201,8 @@ const {
   apiClient: api,
   messagesContainerRef,
   chatInputRef,
+  onConfirmDeleteSession: confirmDeleteSession,
+  onConfirmClearAllSessions: confirmClearAllSessions,
 })
 
 const analysisJumpHistory = computed(() => chatStore.getAnalysisJumpHistory(currentSession.value, 3))
@@ -228,6 +329,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   sessionSidebarMq?.removeEventListener('change', applySessionSidebarLayout)
+  closeSessionConfirm(false)
 })
 </script>
 
@@ -265,6 +367,84 @@ onUnmounted(() => {
   flex-direction: column;
 }
 
+.session-confirm-modal {
+  width: min(92vw, 520px);
+  border: 1px solid rgba(0, 229, 255, 0.22);
+  background:
+    radial-gradient(circle at 80% -30%, rgba(0, 229, 255, 0.12), transparent 55%),
+    linear-gradient(160deg, rgba(8, 16, 34, 0.98), rgba(3, 9, 23, 0.96));
+  box-shadow:
+    0 0 0 1px rgba(0, 229, 255, 0.1),
+    0 20px 60px rgba(0, 0, 0, 0.58);
+  padding: 1.15rem 1.2rem 1rem;
+  padding-left: 28px;
+  clip-path: polygon(16px 0, 100% 0, 100% calc(100% - 16px), calc(100% - 16px) 100%, 0 100%, 0 16px);
+}
+
+.session-confirm-modal__header {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.72rem;
+}
+
+.session-confirm-modal__icon {
+  width: 18px;
+  height: 18px;
+  color: var(--neon-cyan);
+  margin-top: 0.12rem;
+  flex-shrink: 0;
+}
+
+.session-confirm-modal__title {
+  margin: 0;
+  color: #e6f4ff;
+  font-family: var(--font-ui);
+  font-size: 1.05rem;
+  letter-spacing: 0.04em;
+  line-height: 1.35;
+}
+
+.session-confirm-modal__desc {
+  margin-top: 0.8rem;
+  color: #bdd9e8;
+  font-family: var(--font-ui);
+  font-size: 0.92rem;
+  line-height: 1.7;
+}
+
+.session-confirm-modal__actions {
+  margin-top: 1rem;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.62rem;
+}
+
+.session-confirm-modal__btn {
+  min-width: 118px;
+}
+
+.session-confirm-modal__btn--ghost {
+  border: 1px solid rgba(0, 229, 255, 0.26);
+  color: var(--neon-cyan);
+  background: rgba(0, 229, 255, 0.08);
+}
+
+.session-confirm-modal__btn--ghost:hover {
+  border-color: rgba(0, 229, 255, 0.5);
+  background: rgba(0, 229, 255, 0.18);
+}
+
+.session-confirm-modal__btn--danger {
+  border: 1px solid rgba(255, 0, 85, 0.42);
+  color: #ffd9e5;
+  background: rgba(255, 0, 85, 0.24);
+}
+
+.session-confirm-modal__btn--danger:hover {
+  border-color: rgba(255, 0, 85, 0.7);
+  background: rgba(255, 0, 85, 0.38);
+}
+
 @media (max-width: 1024px) {
   .chat-page-sider {
     width: 250px !important;
@@ -278,6 +458,19 @@ onUnmounted(() => {
     width: 220px !important;
     max-width: 220px;
     padding-right: 0.55rem;
+  }
+
+  .session-confirm-modal {
+    width: min(94vw, 420px);
+    padding: 0.95rem 0.92rem 0.88rem;
+  }
+
+  .session-confirm-modal__actions {
+    flex-direction: column-reverse;
+  }
+
+  .session-confirm-modal__btn {
+    width: 100%;
   }
 }
 </style>

@@ -100,27 +100,43 @@
   </FuiCard>
 
   <NModal
-    v-model:show="renameModalVisible"
-    preset="card"
-    title="重命名会话"
-    class="session-rename-modal"
+    :show="renameModalVisible"
     :mask-closable="false"
-    :style="{ width: 'min(420px, 94vw)' }"
-    @after-leave="renameDraft = ''"
+    :auto-focus="false"
+    :show-icon="false"
+    @update:show="handleRenameModalVisibleChange"
   >
-    <NInput
-      v-model:value="renameDraft"
-      placeholder="新的会话名称"
-      :maxlength="100"
-      show-count
-      @keyup.enter="confirmRename"
-    />
-    <div class="session-rename-modal__footer">
-      <NButton quaternary @click="renameModalVisible = false">取消</NButton>
-      <NButton type="primary" :disabled="!renameDraft.trim() || loading" :loading="loading" @click="confirmRename">
-        确定
-      </NButton>
-    </div>
+    <section class="session-confirm-modal">
+      <header class="session-confirm-modal__header">
+        <PencilIcon class="session-confirm-modal__icon" />
+        <h3 class="session-confirm-modal__title">重命名会话</h3>
+      </header>
+
+      <p class="session-confirm-modal__desc">请输入新的会话名称。</p>
+
+      <NInput
+        v-model:value="renameDraft"
+        class="session-confirm-modal__input"
+        placeholder="新的会话名称"
+        :maxlength="100"
+        show-count
+        @keyup.enter="confirmRename"
+      />
+
+      <footer class="session-confirm-modal__actions">
+        <NButton class="session-confirm-modal__btn session-confirm-modal__btn--ghost" @click="closeRenameModal">
+          取消
+        </NButton>
+        <NButton
+          class="session-confirm-modal__btn session-confirm-modal__btn--primary"
+          :disabled="!renameDraft.trim() || loading"
+          :loading="loading"
+          @click="confirmRename"
+        >
+          确定
+        </NButton>
+      </footer>
+    </section>
   </NModal>
 </template>
 
@@ -164,6 +180,19 @@ const openRenameModal = (session) => {
   renameTarget.value = session
   renameDraft.value = session
   renameModalVisible.value = true
+}
+
+const closeRenameModal = () => {
+  renameModalVisible.value = false
+}
+
+const handleRenameModalVisibleChange = (nextShow) => {
+  if (nextShow) {
+    renameModalVisible.value = true
+    return
+  }
+
+  closeRenameModal()
 }
 
 const confirmRename = () => {
@@ -474,9 +503,128 @@ const confirmRename = () => {
 }
 
 .session-rename-modal__footer {
-  margin-top: 0.85rem;
+  margin-top: 1rem;
   display: flex;
   justify-content: flex-end;
-  gap: 0.5rem;
+  gap: 0.62rem;
+}
+
+.session-confirm-modal {
+  width: min(92vw, 520px);
+  border: 1px solid rgba(0, 229, 255, 0.22);
+  background:
+    radial-gradient(circle at 80% -30%, rgba(0, 229, 255, 0.12), transparent 55%),
+    linear-gradient(160deg, rgba(8, 16, 34, 0.98), rgba(3, 9, 23, 0.96));
+  box-shadow:
+    0 0 0 1px rgba(0, 229, 255, 0.1),
+    0 20px 60px rgba(0, 0, 0, 0.58);
+  padding: 1.15rem 1.2rem 1rem;
+  clip-path: polygon(16px 0, 100% 0, 100% calc(100% - 16px), calc(100% - 16px) 100%, 0 100%, 0 16px);
+}
+
+.session-confirm-modal__header {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.72rem;
+}
+
+.session-confirm-modal__icon {
+  width: 18px;
+  height: 18px;
+  color: var(--neon-cyan);
+  margin-top: 0.12rem;
+  flex-shrink: 0;
+}
+
+.session-confirm-modal__title {
+  margin: 0;
+  color: #e6f4ff;
+  font-family: var(--font-ui);
+  font-size: 1.05rem;
+  letter-spacing: 0.04em;
+  line-height: 1.35;
+}
+
+.session-confirm-modal__desc {
+  margin-top: 0.8rem;
+  color: #bdd9e8;
+  font-family: var(--font-ui);
+  font-size: 0.92rem;
+  line-height: 1.7;
+  padding-left: 28px;
+}
+
+.session-confirm-modal__input {
+  margin-top: 0.95rem;
+}
+
+.session-confirm-modal__input :deep(.n-input-wrapper) {
+  min-height: 36px;
+  background: rgba(3, 10, 24, 0.78);
+  border: 1px solid rgba(0, 229, 255, 0.2);
+  box-shadow: none;
+}
+
+.session-confirm-modal__input :deep(.n-input-wrapper:hover),
+.session-confirm-modal__input :deep(.n-input-wrapper.n-input-wrapper--focus) {
+  border-color: rgba(0, 229, 255, 0.5);
+}
+
+.session-confirm-modal__input :deep(.n-input__input-el) {
+  font-family: var(--font-ui);
+  color: #d9f5ff;
+}
+
+.session-confirm-modal__input :deep(.n-input__placeholder),
+.session-confirm-modal__input :deep(.n-input__count) {
+  color: #628296;
+}
+
+.session-confirm-modal__actions {
+  margin-top: 1rem;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.62rem;
+}
+
+.session-confirm-modal__btn {
+  min-width: 118px;
+}
+
+.session-confirm-modal__btn--ghost {
+  border: 1px solid rgba(0, 229, 255, 0.26);
+  color: var(--neon-cyan);
+  background: rgba(0, 229, 255, 0.08);
+}
+
+.session-confirm-modal__btn--ghost:hover {
+  border-color: rgba(0, 229, 255, 0.5);
+  background: rgba(0, 229, 255, 0.18);
+}
+
+.session-confirm-modal__btn--primary {
+  border: 1px solid rgba(0, 229, 255, 0.28);
+  color: #dffbff;
+  background: rgba(0, 229, 255, 0.2);
+}
+
+.session-confirm-modal__btn--primary:hover {
+  border-color: rgba(0, 229, 255, 0.58);
+  background: rgba(0, 229, 255, 0.34);
+}
+
+@media (max-width: 640px) {
+  .session-confirm-modal {
+    width: min(94vw, 420px);
+    padding: 0.95rem 0.92rem 0.88rem;
+  }
+
+  .session-confirm-modal__actions {
+    flex-direction: column-reverse;
+  }
+
+  .session-confirm-modal__btn {
+    width: 100%;
+  }
 }
 </style>

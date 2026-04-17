@@ -454,6 +454,10 @@ export default {
     return axiosApi.delete('/history', { params: { session_id: sessionId } });
   },
 
+  deleteSession(sessionId) {
+    return axiosApi.delete('/session', { params: { session_id: sessionId } });
+  },
+
   renameSession(oldSessionId, newSessionId) {
     return axiosApi.post('/session/rename', {
       old_session_id: oldSessionId,

@@ -38,6 +38,7 @@ from .schemas import (
     SessionRenameIn,
 )
 from .services import (
+    delete_conversation_session,
     get_or_create_session,
     list_user_sessions,
     model_api_call,
@@ -633,6 +634,16 @@ def clear_history(request, session_id: str = "默认对话"):
     session = services.get_or_create_session(processed_session_id, request.auth)
     session.clear_context()
     return {"message": "历史记录已清空"}
+
+
+@router.delete("/session", response={200: dict})
+def delete_session(request, session_id: str = "默认对话"):
+    normalized_session_id, deleted = delete_conversation_session(request.auth, session_id)
+    return {
+        "message": "ok",
+        "session_id": normalized_session_id,
+        "deleted": deleted,
+    }
 
 
 @router.post("/session/rename", response={200: dict, 400: ErrorResponse})

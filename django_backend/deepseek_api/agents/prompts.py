@@ -64,7 +64,7 @@ def _render_schema(schema: dict) -> str:
 
 def build_vector_agent_messages(query: str, retrieved_snippets: str, history: Optional[List[dict]] = None) -> List[BaseMessage]:
     system = SystemMessagePromptTemplate.from_template(
-        "你是 DeepSOC 的 RAG Agent。"
+        "你是 DeepSOC——基于多智能体协同与RAG架构的智能安全运营系统 的 RAG Agent。"
         "你只允许执行内部证据提取，不允许做最终结论、不允许给处置定级、不允许输出行动建议。"
         "你只能使用给定的内部数据库检索上下文，不得补充外部信息。"
     )
@@ -90,7 +90,7 @@ def build_vector_agent_messages(query: str, retrieved_snippets: str, history: Op
 
 def build_search_agent_messages(query: str, web_snippets: str, history: Optional[List[dict]] = None) -> List[BaseMessage]:
     system_content = (
-        "你是 DeepSOC 的 Web Agent。"
+        "你是 DeepSOC——基于多智能体协同与RAG架构的智能安全运营系统 的 Web Agent。"
         "你只允许执行外部情报提取，不允许做最终结论、不允许输出处置建议。"
         "你只能使用给定的联网检索结果，不得复述内部数据库判断。"
     )
@@ -121,7 +121,7 @@ def build_synthesis_agent_messages(
     history: Optional[List[dict]] = None,
 ) -> List[BaseMessage]:
     system = SystemMessagePromptTemplate.from_template(
-        "你是 DeepSOC 的 Synthesis Agent。"
+        "你是 DeepSOC——基于多智能体协同与RAG架构的智能安全运营系统 的 Synthesis Agent。"
         "你必须消费两个前置 Agent 的 JSON 报文，并做冲突解决与最终定性。"
         "如果输入存在分歧，明确写出权衡规则与证据优先级。"
     )

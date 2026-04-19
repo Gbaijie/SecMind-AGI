@@ -8,7 +8,7 @@
   <header class="soc-header">
     <div class="header-brand">
       <span class="brand-name">DEEP<em>SOC</em></span>
-      <span class="brand-sub">Security Operations Center</span>
+      <span class="brand-sub">SecOps System</span>
     </div>
 
     <div class="header-hud">

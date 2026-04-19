@@ -14,7 +14,7 @@
       <section class="brand-panel animate-item delay-1">
         <h1 class="title">
           <div class="title-main">DeepSOC</div>
-          <div class="title-sub">智能安全运营中心</div>
+          <div class="title-sub">智能安全运营系统</div>
         </h1>
       </section>
 

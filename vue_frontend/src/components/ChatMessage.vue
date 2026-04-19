@@ -713,8 +713,8 @@ const formatTime = (date) => {
   background: transparent;
   color: inherit;
   font-family: var(--font-ui);
-  font-size: 0.88rem;
-  line-height: 1.55;
+  font-size: 1.05rem;
+  line-height: 1.6;
   padding: 0.6rem 0.7rem;
   box-shadow: none;
   caret-color: var(--neon-cyan);
@@ -836,14 +836,14 @@ const formatTime = (date) => {
   max-height: 400px;
   overflow: auto;
   font-family: var(--font-ui);
-  font-size: 0.85rem;
-  line-height: 1.45;
-  color: #8fe8ff;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: rgba(143, 232, 255, 0.85); 
 }
 
 .agent-node__content :deep(p),
 .agent-node__content :deep(li) {
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   margin-bottom: 0.3rem;
 }
 
@@ -906,16 +906,16 @@ const formatTime = (date) => {
 }
 
 .synthesis-panel__content {
-  padding: 0.8rem 0.95rem 0.9rem;
-  color: #c6ffe6;
+  padding: 1rem 1.2rem 1.2rem;
+  color: rgba(198, 255, 230, 0.9); 
 }
 
 .terminal-text {
   margin: 0;
   font-family: var(--font-ui);
-  font-size: 0.95rem;
-  line-height: 1.72;
-  color: #e5b8b8; /* 柔和的灰青色替代高亮青色 */
+  font-size: 1.05rem;
+  line-height: 1.75;
+  color: rgba(161, 232, 248, 0.85); 
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -948,7 +948,7 @@ const formatTime = (date) => {
 }
 
 .terminal-message--user .terminal-text {
-  color: #a3ebd5; 
+  color: rgba(163, 235, 213, 0.9); 
 }
 
 .think-text {
@@ -1028,20 +1028,20 @@ const formatTime = (date) => {
 
 :deep(.markdown-body) {
   font-family: var(--font-ui);
-  font-size: 0.95rem;
-  line-height: 1.72;
-  color: var(--neon-cyan);
+  font-size: 1.05rem;
+  line-height: 1.65;
+  color: inherit;
   word-break: break-word;
 }
 
 :deep(.markdown-body p) {
-  margin: 0 0 0.2rem 0 !important;
-  line-height: 1.6;
+  margin: 0 0 0.4rem 0 !important; 
+  line-height: 1.75;
 }
 
 .message-markdown :deep(.code-block-wrapper) {
   position: relative;
-  margin: 0.7rem 0 1.05rem;
+  margin: 0.4rem 0 0.8rem;
   padding-bottom: 0.12rem;
 }
 
@@ -1234,17 +1234,19 @@ const formatTime = (date) => {
 :deep(.markdown-body h4),
 :deep(.markdown-body h5),
 :deep(.markdown-body h6) {
-  font-size: 1.05rem; 
+  font-size: 1.25rem; 
   color: #00E5FF; 
-  margin: 1.4rem 0 0.6rem 0; 
+  margin: 0.8rem 0 0.4rem 0;
   font-weight: 700;
   line-height: 1.4;
+  letter-spacing: 0.05em;
+  text-shadow: 0 0 8px rgba(0, 229, 255, 0.25); 
 }
 
 :deep(.markdown-body ul),
 :deep(.markdown-body ol) {
-  margin: 0.1rem 0 !important;
-  padding-left: 2.5rem; 
+  margin: 0.2rem 0 0.6rem 0 !important;
+  padding-left: 1.5rem; 
 }
 
 :deep(.agent-node__content.markdown-body ul),
@@ -1254,7 +1256,12 @@ const formatTime = (date) => {
 }
 
 :deep(.markdown-body li) {
-  margin-bottom: 0.1rem;
+  margin-bottom: 0.2rem;
+  line-height: 1.6;
+}
+
+:deep(.markdown-body li::marker) {
+  color: rgba(0, 229, 255, 0.6); 
 }
 
 :deep(.markdown-body li > ul),
@@ -1267,6 +1274,20 @@ const formatTime = (date) => {
 :deep(.markdown-body b) {
   color: #00E5FF; 
   font-weight: 700;
+  text-shadow: 0 0 4px rgba(0, 229, 255, 0.2); 
+}
+
+:deep(.markdown-body a) {
+  color: #43f3a2;
+  text-decoration: none;
+  border-bottom: 1px dashed rgba(67, 243, 162, 0.4);
+  transition: all 0.2s ease;
+}
+
+:deep(.markdown-body a:hover) {
+  color: #00E5FF;
+  border-bottom-color: #00E5FF;
+  text-shadow: 0 0 5px rgba(0, 229, 255, 0.4);
 }
 
 @media (max-width: 900px) {
@@ -1274,13 +1295,10 @@ const formatTime = (date) => {
     padding: 0.55rem 0.7rem 0.65rem;
   }
 
-  .terminal-text {
-    font-size: 0.82rem;
-  }
-
-  :deep(.markdown-body) {
-    font-size: 0.85rem;
-    line-height: 1.65;
+  .terminal-text,
+  :deep(.markdown-body),
+  .terminal-text--editor {
+    font-size: 0.95rem;
   }
 
   .agent-node__content,
@@ -1288,6 +1306,11 @@ const formatTime = (date) => {
   .agent-node__content :deep(li) {
     font-size: 0.78rem;
     line-height: 1.4;
+  }
+
+  :deep(.markdown-body h1),
+  :deep(.markdown-body h2) {
+    font-size: 1.15rem;
   }
 
   .terminal-message__meta {

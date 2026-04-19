@@ -174,7 +174,7 @@ export function useChatSettings({ router, apiClient, currentSession, sessions, o
   }
 
   const buildExportHtml = (sessionName, exportTime, sessionMessages) => {
-    let html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>DeepSOC 聊天记录 - ${sessionName}</title><style>body{font-family:'HarmonyOS Sans SC','HarmonyOS Sans','PingFang SC','Microsoft YaHei','Segoe UI',sans-serif;background:#050814;color:#00E5FF;max-width:900px;margin:0 auto;padding:20px}.msg{margin:12px 0;padding:12px;border:1px solid rgba(0,229,255,0.3)}.user{color:#00FF9D}.ai{color:#00E5FF}</style></head><body><h1>DeepSOC - ${sessionName}</h1><p>导出时间: ${exportTime}</p>`
+    let html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>DeepSOC 聊天记录 - ${sessionName}</title><style>body{font-family:'HarmonyOS Sans SC','HarmonyOS Sans','PingFang SC','Microsoft YaHei','Segoe UI',sans-serif;background:#050814;color:#00E5FF;max-width:900px;margin:0 auto;padding:20px}.msg{margin:12px 0;padding:12px;border:1px solid rgba(0,229,255,0.3)}.user{color:#00FF9D}.ai{color:#00E5FF}</style></head><body><h1>DeepSOC——基于多智能体协同与RAG架构的智能安全运营系统 - ${sessionName}</h1><p>导出时间: ${exportTime}</p>`
 
     sessionMessages.forEach((message) => {
       html += `<div class="msg ${message.isUser ? 'user' : 'ai'}"><strong>${message.isUser ? 'USER' : 'AI'}</strong><pre>${message.content || ''}</pre></div>`

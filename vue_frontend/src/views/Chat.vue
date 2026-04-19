@@ -94,7 +94,7 @@
               <div class="terminal-empty-inner">
                 <img class="terminal-empty-logo animate-item delay-1" :src="deepsocEmptyLogo" alt="DeepSOC" />
                 <div class="terminal-empty-brand animate-item delay-2">
-                  <p class="terminal-empty-brand__line">智能安全运营中心系统</p>
+                  <p class="terminal-empty-brand__line">智能安全运营系统</p>
                 </div>
                 <p class="terminal-empty-hint animate-item delay-3">有什么我能帮您的吗？</p>
               </div>
@@ -237,27 +237,22 @@ const lastEditableUserMessageId = computed(() => {
 const messagesScrollFingerprint = computed(() => {
   const m = messages.value || []
   if (!m.length) return '0'
+  
   const last = m[m.length - 1]
-  const ad = last.agentData
-  const ragLen = ad?.rag?.content?.length ?? 0
-  const webLen = ad?.web?.content?.length ?? 0
-  const ragSt = ad?.rag?.status ?? ''
-  const webSt = ad?.web?.status ?? ''
+  const agentDataFingerprint = last.agentData ? JSON.stringify(last.agentData) : ''
+  
   return [
     m.length,
     last.id,
     String(last.content || '').length,
     String(last.think_process || '').length,
-    ragLen,
-    webLen,
-    ragSt,
-    webSt,
+    agentDataFingerprint,
     last.duration ?? '',
   ].join('|')
 })
 
 /** 距底部小于此值视为「在跟随区」，内容增长时自动滚到底；滚轮/拖拽离开此区域后不再强跟 */
-const NEAR_BOTTOM_PX = 120
+const NEAR_BOTTOM_PX = 60
 const isNearBottom = ref(true)
 
 const handleScroll = (e) => {

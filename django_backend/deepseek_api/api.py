@@ -45,7 +45,7 @@ from .services import (
 
 logger = logging.getLogger(__name__)
 
-api = NinjaAPI(title="DeepSeek-R1:7B API", version="0.0.1")
+api = NinjaAPI(title="DeepSOC——基于多智能体协同与RAG架构的智能安全运营系统 API", version="0.0.1")
 
 
 def api_key_auth(request):

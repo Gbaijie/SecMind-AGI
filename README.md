@@ -1,6 +1,6 @@
-# DeepSOC 智能安全运营中心系统
+# DeepSOC——基于多智能体协同与RAG架构的智能安全运营系统
 
-DeepSOC 是一个面向网络安全日志分析场景的 SOC（Security Operations Center）原型系统，采用前后端分离架构：
+DeepSOC（基于多智能体协同与RAG架构的智能安全运营系统）是一个面向网络安全日志分析场景的 SOC（Security Operations Center）原型系统，采用前后端分离架构：
 
 - 后端：Django + django-ninja + ChromaDB + LlamaIndex + OpenAI-compatible LLM 路由
 - 前端：Vue 3 + Pinia + Naive UI + ECharts + Three.js
@@ -65,6 +65,60 @@ DeepSOC 是一个面向网络安全日志分析场景的 SOC（Security Operatio
 - 支持分页、详情异步加载、请求取消、字段高亮。
 - 支持导出 CSV / JSON，支持导出范围、字段选择、是否包含 details、文件名前缀。
 - 支持一键发送到分析终端并复用会话跳转链路。
+
+### 2.5 代码级后端特色功能（细节能力）
+
+- 聊天流启动后会先发送 `ping` 事件，确保前端快速进入流式消费状态。
+- 流式接口同时兼容 ASGI/WSGI 请求上下文：ASGI 下通过 `sync_to_async(next)` 驱动迭代，避免阻塞事件循环。
+- `mode=multi_agent` 下支持 `agent_configs`，可对 rag/web/synthesis 三路分别指定 provider/model/key。
+- 会话历史使用文本协议保存，但做了协议转义与反转义，防止用户原文中的“用户：/回复：”破坏历史解析。
+- 多智能体元信息会被序列化为 `【MULTI_AGENT_META】...` 块并持久化，历史恢复时可还原各 Agent 状态。
+- 对“重新生成”做了后端判定：识别“最后一轮 user+assistant 与当前输入一致”并回退上下文，避免重复叠加。
+- `upload_file` 除后缀校验外，针对 docx/xlsx 增加 Office ZIP 结构校验（条目数上限、解压后体积上限），防止压缩炸弹。
+- OpenAI-compatible 调用失败时输出结构化错误：`provider/model/status_code/error_code/message/request_id`。
+- 本地 Ollama 调用不可用时，会自动降级到 siliconflow 远程模型，并通过 `notice` 事件告知前端。
+- `test_connection` 提供 provider/search 双链路探测，返回 `latency_ms`，便于设置页即时诊断。
+- `runtime-config` 可回填服务端默认 API Key（各 provider + web search），降低首次配置成本。
+
+### 2.6 代码级检索特色功能（TopKLogSystem）
+
+- 数据接入支持 `.txt/.md/.json/.jsonl/.csv/.log/.xml/.yaml/.yml/.docx/.pdf`。
+- JSON/JSONL 文档按 `search_content` 入向量，并写入结构化 metadata（`_id/db_type/risk_level/cve_id/ioc_value/source/confidence/raw_content_hash/mitre_attack_id/tags` 等）。
+- 自动补充 `record_file/record_line`，提升证据追溯性。
+- 查询时先做“意图信号提取”（CVE、IP、MITRE、哈希），再执行“精确召回 + 向量召回 + 关键词融合”。
+- 精确命中（如 `cve_id`）可强制高分进入候选，避免纯语义检索漏召回。
+- 排序不仅看向量相似度，还融合 `risk_level/source_priority/confidence/exact_match_boost`。
+- 结果聚合优先级：`cve_id -> ioc_value -> raw_content_hash -> tags -> db_type/source`，输出 group 级证据链。
+- 存在“松弛召回”二次检索路径：主路径低分或空结果时自动降低阈值重试，提升召回鲁棒性。
+- 远程 embedding 模式并非降级成普通搜索，而是复用同一套候选融合与重排策略，保证结果口径一致。
+
+### 2.7 代码级前端特色功能（交互与体验）
+
+- 路由守卫不仅做登录校验，还会在已登录状态下自动尝试同步 `runtime-config`。
+- 聊天流处理具备“空闲超时 + 缓冲区上限 + 可重试”机制，避免 SSE 长连接僵死。
+- SSE 事件按类型路由：`agent_chunk/agent_status/notice/content/think/metadata/error`，并统一错误格式化。
+- 流式渲染采用“队列 + requestAnimationFrame + 定时窗口”批量刷帧，减少高频 chunk 导致的重排抖动。
+- 聊天支持 `AbortController` 停止生成，前后端均可快速收敛状态。
+- 支持“仅允许编辑最近一条用户消息”的安全编辑重问，防止中间历史被破坏。
+- 消息 Markdown 渲染使用 `marked + highlight.js + DOMPurify`，并给代码块注入一键复制按钮。
+- 多智能体消息支持折叠面板，分别展示 rag/web 状态、内容、错误详情。
+- 会话草稿按会话维度持久化，且带防抖写入，减少本地存储抖动。
+- 会话重命名会联动导出目标会话 ID、分析跳转历史等关联状态，避免“重命名后失联”。
+- 看板图表具备全屏降级方案：当浏览器 Fullscreen API 不可用时自动回落到 Modal 全屏。
+- 图表下钻引导具备“首次提示记忆”能力（localStorage 标记已读），减少重复打扰。
+- IntelQuery 请求支持 AbortController 取消旧请求，防止慢响应覆盖新筛选结果。
+- Intel 详情支持沉浸式阅读器、字段级复制反馈、关键词高亮缓存。
+
+### 2.8 代码级工程与运维特色功能
+
+- 查询服务基于“文件签名 + 30s 刷新窗口 + RLock”实现缓存，兼顾性能与数据更新。
+- 支持查询缓存预热（启动后主动触发一次轻量查询）。
+- 导出文件名会做白名单字符清洗，避免非法文件名与注入风险。
+- 导出支持 `all/current_page`、字段选择、`include_details`、CSV/JSON 双格式。
+- 前端全局错误通过 `deepsoc:api-error` 事件分发，401 通过 `deepsoc:unauthorized` 统一处理。
+- Vite 构建配置了 manualChunks（`vue-vendor/naive/charts/three`）以优化首屏加载。
+- Dashboard 与 Intel 页面使用 `keep-alive`，减少高频切页重复初始化成本。
+- 仪表盘数据轮询采用“前后台区分加载态”策略：首屏显式 loading，后台轮询静默刷新。
 
 ---
 

@@ -664,7 +664,11 @@ const handlePing = async (type) => {
   margin-bottom: 5rem;
 }
 
-.settings-panel--data-interface .summary-strip,
+.settings-panel--data-interface .summary-strip {
+  margin-top: 2.5rem;
+  margin-bottom: 3rem;
+}
+
 .settings-panel--security .summary-strip {
   margin-bottom: 3rem;
 }

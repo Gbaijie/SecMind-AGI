@@ -417,7 +417,12 @@ class TopKLogSystem:
     @staticmethod
     def _build_query_terms(query: str) -> List[str]:
         lowered = query.lower()
-        tokens = set(re.findall(r"[a-zA-Z0-9\-_.]+", lowered))
+
+        stop_words = ["了", "怎么", "怎么办", "如何", "为什么", "的", "是", "在", "帮我", "看看", "分析"]
+        for stop_word in stop_words:
+            lowered = lowered.replace(stop_word, " ")
+
+        tokens = set(re.findall(r"[a-zA-Z0-9\-_.]+|[\u4e00-\u9fa5]{2,}", lowered))
         tokens.update(
             match.lower()
             for match in re.findall(r"CVE-\d{4}-\d+", query, flags=re.IGNORECASE)
@@ -426,7 +431,7 @@ class TopKLogSystem:
             match.lower()
             for match in re.findall(r"T\d{4}(?:\.\d{3})?", query, flags=re.IGNORECASE)
         )
-        return sorted(token for token in tokens if len(token) >= 3)
+        return sorted(token for token in tokens if len(token) >= 2)
 
     @staticmethod
     def _matches_filters(metadata: Dict[str, Any], filters: Optional[Dict[str, Any]]) -> bool:
@@ -680,14 +685,18 @@ class TopKLogSystem:
             risk_level = TopKLogSystem._normalize_risk_level(metadata.get("risk_level"))
             risk_score = risk_weight.get(risk_level, 0.25)
 
-            final_score = (
-                item["vector_score"] * 0.5
-                + item["keyword_score"] * 0.2
-                + confidence_norm * 0.15
-                + source_priority * 0.1
-                + risk_score * 0.05
-                + exact_match_boost
-            )
+            text_match_score = item["vector_score"] * 0.5 + item["keyword_score"] * 0.2
+
+            if text_match_score < 0.15 and exact_match_boost == 0.0:
+                final_score = text_match_score
+            else:
+                final_score = (
+                    text_match_score
+                    + confidence_norm * 0.15
+                    + source_priority * 0.1
+                    + risk_score * 0.05
+                    + exact_match_boost
+                )
 
             ranked_items.append(
                 {
@@ -848,6 +857,7 @@ class TopKLogSystem:
         """
         if not self.log_index:
             return []
+
         primary_candidates, query_signals = self._collect_candidates(
             query=query,
             top_k=top_k,
@@ -859,39 +869,25 @@ class TopKLogSystem:
         ranked_items = self._rank_candidates(primary_candidates, query_signals)
 
         best_score = ranked_items[0]["score"] if ranked_items else 0.0
-        if not ranked_items or best_score < 0.35:
+        if not ranked_items or best_score < 0.40:
             relaxed_candidates, relaxed_signals = self._collect_candidates(
                 query=query,
-                top_k=max(top_k * 8, 40),
+                top_k=max(top_k * 4, 20),
                 use_keyword=use_keyword,
                 filters=filters,
-                vector_floor=0.0,
-                keyword_floor=0.08,
+                vector_floor=0.12,
+                keyword_floor=0.10,
             )
             relaxed_ranked_items = self._rank_candidates(relaxed_candidates, relaxed_signals)
 
             relaxed_best_score = relaxed_ranked_items[0]["score"] if relaxed_ranked_items else 0.0
-            if relaxed_ranked_items and (
-                not ranked_items
-                or relaxed_best_score > best_score
-                or len(relaxed_ranked_items) > len(ranked_items)
-            ):
+            if relaxed_ranked_items and (not ranked_items or relaxed_best_score > best_score):
                 ranked_items = relaxed_ranked_items
 
-            if not ranked_items and filters:
-                fallback_candidates, fallback_signals = self._collect_candidates(
-                    query=query,
-                    top_k=max(top_k * 8, 40),
-                    use_keyword=use_keyword,
-                    filters=None,
-                    vector_floor=0.0,
-                    keyword_floor=0.08,
-                )
-                fallback_ranked_items = self._rank_candidates(fallback_candidates, fallback_signals)
-                if fallback_ranked_items:
-                    ranked_items = fallback_ranked_items
+        min_valid_score = 0.35
+        valid_items = [item for item in ranked_items if item["score"] >= min_valid_score]
 
-        grouped_items = self._group_retrieval_results(ranked_items)
+        grouped_items = self._group_retrieval_results(valid_items)
         return grouped_items[:top_k]
 
     def retrieve_logs(

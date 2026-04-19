@@ -236,7 +236,7 @@
 </template>
 
 <script setup>
-import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue'
 import { NButton, NCard, NGi, NGrid, NModal } from 'naive-ui'
 import {
   ChevronDownIcon,
@@ -274,7 +274,7 @@ const threatRadarTitle = ref('THREAT RADAR')
 const logIngestStreamTitle = ref('LOG INGEST STREAM')
 const categoryDistributionTitle = ref('CATEGORY DISTRIBUTION')
 
-const { dashboardStats, statsLoading } = useDashboardStats(api)
+const { dashboardStats, statsLoading, startPolling, stopPolling } = useDashboardStats(api)
 const { fallbackPanelKey, togglePanel, closeFallbackPanel, isPanelActive } = useFullscreenPanel({
   topology: topologyPanelRef,
   radar: radarPanelRef,
@@ -473,6 +473,14 @@ onMounted(() => {
   animationTimers.push(setTimeout(() => {
     categoryDistributionScramble.start('CATEGORY DISTRIBUTION', 300)
   }, 100))
+})
+
+onActivated(() => {
+  startPolling()
+})
+
+onDeactivated(() => {
+  stopPolling()
 })
 
 onBeforeUnmount(() => {

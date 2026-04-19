@@ -6,6 +6,7 @@ import zipfile
 import time
 import requests
 from typing import Generator
+from asgiref.sync import sync_to_async
 from ninja import File, NinjaAPI, Router, Schema
 
 from django.conf import settings
@@ -236,6 +237,11 @@ def _sse_error_response(status_code: int, message: str) -> StreamingHttpResponse
         status=status_code,
         content_type="text/event-stream",
     )
+
+
+def _is_asgi_request(request) -> bool:
+    # ASGIRequest 挂载了 scope，WSGIRequest 不会有该属性。
+    return hasattr(request, "scope")
 
 
 def _validate_office_archive(file_obj, filename: str) -> tuple[bool, str]:
@@ -586,9 +592,23 @@ def chat(request, data: ChatIn):
         finally:
             yield _sse_line({"type": "done"})
 
-    response = StreamingHttpResponse(stream_generator(), content_type="text/event-stream")
+    if _is_asgi_request(request):
+
+        async def async_stream_generator():
+            iterator = iter(stream_generator())
+            while True:
+                chunk = await sync_to_async(next, thread_sensitive=True)(iterator, None)
+                if chunk is None:
+                    break
+                yield chunk
+
+        streaming_content = async_stream_generator()
+    else:
+        streaming_content = stream_generator()
+
+    response = StreamingHttpResponse(streaming_content, content_type="text/event-stream")
     response["X-Accel-Buffering"] = "no"
-    response["Cache-Control"] = "no-cache"
+    response["Cache-Control"] = "no-cache, no-transform"
     return response
 
 

@@ -79,5 +79,7 @@ export function useDashboardStats(apiClient, pollIntervalMs = 60000) {
     dashboardStats,
     statsLoading,
     loadDashboardStats,
+    startPolling,
+    stopPolling,
   }
 }

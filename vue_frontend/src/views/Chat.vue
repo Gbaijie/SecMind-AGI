@@ -85,7 +85,7 @@
       </div>
 
       <div class="messages-container">
-        <NScrollbar ref="messagesViewportRef" class="messages-viewport">
+        <NScrollbar :ref="setMessagesViewportRef" class="messages-viewport" :on-scroll="handleScroll">
           <div class="messages-viewport-inner">
             <NAlert v-if="entryHint" class="terminal-entry-hint" type="info" :show-icon="true">
               {{ entryHint }}
@@ -119,12 +119,12 @@
 
         <Transition name="fade-up">
           <button
-            v-if="(loading || streaming) && !isNearBottom"
+            v-if="!isNearBottom"
             class="scroll-to-bottom-btn"
             @click="forceScrollToBottom"
+            title="回到底部"
           >
             <ArrowDownIcon class="scroll-to-bottom-btn__icon" />
-            <span class="scroll-to-bottom-btn__text">回到底部跟随</span>
           </button>
         </Transition>
       </div>
@@ -138,7 +138,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, onUnmounted, ref, toRefs, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, toRefs, watch } from 'vue'
 import { NAlert, NButton, NCard, NScrollbar } from 'naive-ui'
 import FuiCard from '../components/FuiCard.vue'
 import ChatMessage from '../components/ChatMessage.vue'
@@ -191,19 +191,17 @@ const {
   chatInputRef,
 } = toRefs(props)
 
-/** 本地绑定 NScrollbar，避免「props 传入的 ref + 子组件 :ref」解包不一致导致父级 ref 永远为 null */
+/** 本地绑定 NScrollbar，并同步给父级引用，供会话加载时复用 */
 const messagesViewportRef = ref(null)
 
-watch(
-  messagesViewportRef,
-  (inst) => {
-    const parentRef = props.messagesContainerRef
-    if (parentRef && typeof parentRef === 'object' && 'value' in parentRef) {
-      parentRef.value = inst
-    }
-  },
-  { immediate: true, flush: 'post' },
-)
+const setMessagesViewportRef = (inst) => {
+  messagesViewportRef.value = inst
+
+  const parentRef = props.messagesContainerRef
+  if (parentRef && typeof parentRef === 'object' && 'value' in parentRef) {
+    parentRef.value = inst
+  }
+}
 
 const hasRenderablePayload = (message) => {
   if (!message || typeof message !== 'object') return false
@@ -261,85 +259,30 @@ const messagesScrollFingerprint = computed(() => {
 /** 距底部小于此值视为「在跟随区」，内容增长时自动滚到底；滚轮/拖拽离开此区域后不再强跟 */
 const NEAR_BOTTOM_PX = 120
 const isNearBottom = ref(true)
-let messagesScrollCleanup = null
 
-const resolveMessagesScrollbar = () => {
-  const inst = messagesViewportRef.value
-  if (!inst) return null
-  return inst
-}
-
-const getScrollEl = () => {
-  const sb = resolveMessagesScrollbar()
-  if (!sb) return null
-  const inner = sb.scrollbarInstRef?.value
-  if (inner?.containerRef) {
-    const c = inner.containerRef
-    return c.value ?? c
-  }
-  const root = sb.$el
-  if (root?.querySelector) {
-    return root.querySelector('.n-scrollbar-container')
-  }
-  return null
-}
-
-const updateNearBottom = () => {
-  const el = getScrollEl()
+const handleScroll = (e) => {
+  const el = e?.target
   if (!el) return
-  const dist = el.scrollHeight - el.scrollTop - el.clientHeight
+  const dist = Math.ceil(el.scrollHeight - el.scrollTop) - el.clientHeight
   isNearBottom.value = dist <= NEAR_BOTTOM_PX
 }
 
 const scrollToBottom = (force = false) => {
   if (!force && !isNearBottom.value) return
-  const sb = resolveMessagesScrollbar()
+  const sb = messagesViewportRef.value
   if (!sb) return
   if (typeof sb.scrollTo === 'function') {
     sb.scrollTo({
       position: 'bottom',
-      behavior: force ? 'auto' : 'smooth',
+      behavior: 'auto',
     })
-  } else {
-    const el = getScrollEl()
-    if (el) el.scrollTop = el.scrollHeight
   }
-  requestAnimationFrame(() => updateNearBottom())
 }
 
 const forceScrollToBottom = () => {
   isNearBottom.value = true
   scrollToBottom(true)
 }
-
-const bindMessagesScroll = () => {
-  messagesScrollCleanup?.()
-  messagesScrollCleanup = null
-  const el = getScrollEl()
-  if (!el) return
-  const onScroll = () => updateNearBottom()
-  /** 滚轮/触控板等产生的滚动同样会触发 scroll；此处显式监听 wheel 以便与「程序滚动」区分时仍更新跟随状态 */
-  const onWheel = () => {
-    requestAnimationFrame(() => updateNearBottom())
-  }
-  el.addEventListener('scroll', onScroll, { passive: true })
-  el.addEventListener('wheel', onWheel, { passive: true })
-  messagesScrollCleanup = () => {
-    el.removeEventListener('scroll', onScroll)
-    el.removeEventListener('wheel', onWheel)
-  }
-}
-
-watch(
-  messagesViewportRef,
-  () => {
-    nextTick(() => {
-      bindMessagesScroll()
-      updateNearBottom()
-    })
-  },
-  { flush: 'post' },
-)
 
 watch(messagesScrollFingerprint, () => {
   nextTick(() => scrollToBottom(false))
@@ -377,7 +320,6 @@ watch(currentSession, () => {
   nextTick(() => scrollToBottom(true))
 })
 
-/** 开始生成：用户刚发完，强制跟到底一次（避免此时 isNearBottom 未更新导致不滚） */
 watch(loading, (isLoading, wasLoading) => {
   if (isLoading && !wasLoading) {
     isNearBottom.value = true
@@ -390,15 +332,8 @@ watch(loading, (isLoading, wasLoading) => {
 
 onMounted(() => {
   nextTick(() => {
-    bindMessagesScroll()
-    updateNearBottom()
     scrollToBottom(true)
   })
-})
-
-onUnmounted(() => {
-  messagesScrollCleanup?.()
-  messagesScrollCleanup = null
 })
 </script>
 
@@ -848,39 +783,60 @@ onUnmounted(() => {
   letter-spacing: 0.08em;
 }
 
+/* 彻底清除切角和背景干扰的悬浮按钮 */
 .scroll-to-bottom-btn {
   position: absolute;
-  bottom: 0.5rem;
+  bottom: 2.5rem;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
   align-items: center;
-  gap: 0.35rem;
-  padding: 0.45rem 0.9rem;
-  background: rgba(4, 12, 28, 0.85);
-  border: 1px solid rgba(0, 229, 255, 0.6);
-  border-radius: 4px;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  
+  background: rgba(2, 8, 22, 0.4) !important; 
+  background-image: none !important;
+  clip-path: none !important; 
+  
+  border: 1.5px solid rgba(0, 229, 255, 0.4) !important;
+  border-radius: 50% !important;
+  
   color: var(--neon-cyan);
-  font-family: var(--font-ui);
-  font-size: 0.75rem;
   cursor: pointer;
   backdrop-filter: blur(4px);
-  box-shadow: 0 0 10px rgba(0, 229, 255, 0.15);
-  z-index: 10;
-  transition: all 0.2s ease;
+  z-index: 100;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  outline: none;
 }
 
 .scroll-to-bottom-btn:hover {
-  background: rgba(0, 229, 255, 0.15);
-  border-color: var(--neon-cyan);
-  box-shadow: 0 0 15px rgba(0, 229, 255, 0.35);
+  /* 确保悬停时也不会触发切角背景 */
+  background: rgba(0, 229, 255, 0.15) !important;
+  background-image: none !important;
+  border-color: var(--neon-cyan) !important;
+  color: #fff;
+  box-shadow: 0 0 15px rgba(0, 229, 255, 0.3);
+  transform: translate(-50%, -4px);
+}
+
+.scroll-to-bottom-btn:active {
+  transform: translate(-50%, 0px) scale(0.9);
 }
 
 .scroll-to-bottom-btn__icon {
-  width: 14px;
-  height: 14px;
+  width: 24px;
+  height: 24px;
+  animation: hint-down 2s infinite ease-in-out;
 }
 
+@keyframes hint-down {
+  0%, 100% { transform: translateY(-2px); }
+  50% { transform: translateY(2px); }
+}
+
+/* 过渡动画 */
 .fade-up-enter-active,
 .fade-up-leave-active {
   transition: opacity 0.3s ease, transform 0.3s ease;
@@ -889,6 +845,6 @@ onUnmounted(() => {
 .fade-up-enter-from,
 .fade-up-leave-to {
   opacity: 0;
-  transform: translate(-50%, 10px);
+  transform: translate(-50%, 15px);
 }
 </style>

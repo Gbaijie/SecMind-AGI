@@ -188,7 +188,7 @@ const buildOption = () => {
     })
   })
 
-  const mainCategoryNames = categories.map((item) => item.name)
+  const mainCategoryNames = enriched.map((item) => item.name)
   const allTagNames = tagSeries.map((item) => item.name)
   const legendData = fullscreen ? [...mainCategoryNames, ...allTagNames] : mainCategoryNames
 

@@ -39,7 +39,11 @@
       </n-layout-header>
 
       <n-layout-content class="main-content">
-        <router-view />
+        <router-view v-slot="{ Component }">
+          <keep-alive include="Dashboard,IntelQuery">
+            <component :is="Component" />
+          </keep-alive>
+        </router-view>
       </n-layout-content>
     </n-layout>
   </n-layout>

@@ -1,109 +1,124 @@
-<!--
-  组件职责：采集用户输入、附件与会话参数并触发发送事件。
-  业务模块：对话输入模块
-  主要数据流：用户输入/配置 -> 发送载荷 -> 上层会话容器
--->
-
 <template>
-  <NCard class="terminal-input-shell" :class="{ 'terminal-input-shell--focused': isFocused }" :bordered="false"
-    embedded>
-    <div class="terminal-controls">
-      <NForm inline label-placement="left" :show-feedback="false" class="toggle-form">
-        <NFormItem class="toggle-item" label="">
-          <NSwitch v-model:value="useDbSearch" size="small" />
-          <span class="toggle-core">
-            <DatabaseIcon class="toggle-icon" /> DB SEARCH
-          </span>
-        </NFormItem>
+  <NCard 
+    class="terminal-input-shell" 
+    :class="{ 'terminal-input-shell--focused': isFocused, 'terminal-input-shell--has-text': draftMessage.length > 0 }" 
+    :bordered="false"
+    embedded
+  >
+    <div class="expandable-wrapper toggle-wrapper">
+      <div class="expandable-inner">
+        <div class="terminal-controls">
+          <NForm inline label-placement="left" :show-feedback="false" class="toggle-form">
+            <NFormItem class="toggle-item" label="">
+              <NSwitch v-model:value="useDbSearch" size="small" />
+              <span class="toggle-core">
+                <DatabaseIcon class="toggle-icon" /> DB SEARCH
+              </span>
+            </NFormItem>
 
-        <NFormItem class="toggle-item" label="">
-          <NSwitch v-model:value="useWebSearch" size="small" />
-          <span class="toggle-core">
-            <WorldIcon class="toggle-icon" /> WEB SEARCH
-          </span>
-        </NFormItem>
+            <NFormItem class="toggle-item" label="">
+              <NSwitch v-model:value="useWebSearch" size="small" />
+              <span class="toggle-core">
+                <WorldIcon class="toggle-icon" /> WEB SEARCH
+              </span>
+            </NFormItem>
 
-        <NFormItem class="toggle-item" label="">
-          <NSwitch v-model:value="isMultiAgentEnabled" size="small" />
-          <span class="toggle-core">
-            <BoltIcon class="toggle-icon" /> MULTI AGENT
-          </span>
-        </NFormItem>
-      </NForm>
-
-      <div v-if="attachmentText" class="attachment-chip" title="附件将随本次消息发送">
-        <PaperclipIcon class="toggle-icon" />
-        <span class="attachment-name">{{ attachmentName }}</span>
-        <NButton class="chip-close" text :disabled="loading" aria-label="移除附件" @click="removeAttachment">
-          <span class="chip-close-icon">×</span>
-        </NButton>
+            <NFormItem class="toggle-item" label="">
+              <NSwitch v-model:value="isMultiAgentEnabled" size="small" />
+              <span class="toggle-core">
+                <BoltIcon class="toggle-icon" /> MULTI AGENT
+              </span>
+            </NFormItem>
+          </NForm>
+        </div>
       </div>
     </div>
 
-    <div v-if="isEditing" class="edit-hint-bar">
-      <span class="edit-hint-text">正在编辑上一条问题</span>
-      <NButton class="edit-hint-cancel" text type="primary" size="small" :disabled="loading" @click="cancelEdit">
-        取消编辑
+    <div v-if="attachmentText" class="attachment-bar">
+      <PaperclipIcon class="attachment-icon" />
+      <span class="attachment-name">{{ attachmentName }}</span>
+      <NButton class="attachment-close" text :disabled="loading" aria-label="移除附件" @click="removeAttachment">
+        <XIcon class="close-icon-svg" />
       </NButton>
     </div>
 
-    <NForm v-if="isMultiAgentEnabled" label-placement="top" :show-feedback="false" class="multi-agent-config">
-      <div class="multi-agent-config__title">TACTICAL MODEL MATRIX</div>
-      <div class="multi-agent-provider">PROVIDER: {{ normalizedProvider.toUpperCase() }}</div>
-      <NGrid class="multi-agent-config__grid" cols="1 s:1 m:3" :x-gap="8" :y-gap="8" responsive="screen">
-        <NGi>
-          <NFormItem label="RAG MODEL" class="agent-model-field">
-            <NSelect v-model:value="multiAgentModels.rag" :options="modelSelectOptions" :disabled="loading" />
-          </NFormItem>
-        </NGi>
-        <NGi>
-          <NFormItem label="WEB MODEL" class="agent-model-field">
-            <NSelect v-model:value="multiAgentModels.web" :options="modelSelectOptions" :disabled="loading" />
-          </NFormItem>
-        </NGi>
-        <NGi>
-          <NFormItem label="SYNTHESIS MODEL" class="agent-model-field">
-            <NSelect v-model:value="multiAgentModels.synthesis" :options="modelSelectOptions" :disabled="loading" />
-          </NFormItem>
-        </NGi>
-      </NGrid>
-    </NForm>
+    <div v-if="isEditing" class="edit-hint-bar">
+      <span class="edit-hint-text">ACTIVE OVERRIDE: 正在编辑上行指令</span>
+      <NButton class="edit-hint-cancel" text type="primary" size="small" :disabled="loading" @click="cancelEdit">
+        ABORT
+      </NButton>
+    </div>
+
+    <div class="expandable-wrapper multi-agent-wrapper" :class="{ 'is-active': isMultiAgentEnabled }">
+      <div class="expandable-inner">
+        <NForm label-placement="top" :show-feedback="false" class="multi-agent-config">
+          <div class="multi-agent-header">
+            <div class="multi-agent-title">TACTICAL MODEL MATRIX</div>
+            <div class="multi-agent-provider">PROVIDER: {{ normalizedProvider.toUpperCase() }}</div>
+          </div>
+          <NGrid class="multi-agent-grid" cols="1 s:1 m:3" :x-gap="12" :y-gap="8" responsive="screen">
+            <NGi>
+              <NFormItem label="RAG ENGINE" class="agent-field">
+                <NSelect v-model:value="multiAgentModels.rag" :options="modelSelectOptions" :disabled="loading" />
+              </NFormItem>
+            </NGi>
+            <NGi>
+              <NFormItem label="WEB ENGINE" class="agent-field">
+                <NSelect v-model:value="multiAgentModels.web" :options="modelSelectOptions" :disabled="loading" />
+              </NFormItem>
+            </NGi>
+            <NGi>
+              <NFormItem label="SYNTHESIS ENGINE" class="agent-field">
+                <NSelect v-model:value="multiAgentModels.synthesis" :options="modelSelectOptions" :disabled="loading" />
+              </NFormItem>
+            </NGi>
+          </NGrid>
+        </NForm>
+      </div>
+    </div>
 
     <div class="input-stage">
       <input ref="fileInputRef" type="file" accept=".txt,.docx,.xlsx" style="display: none" @change="onFileChange" />
 
-      <NButton class="stage-btn" quaternary circle @click="triggerFileSelect" :disabled="loading" title="上传文件">
-        <PaperclipIcon class="stage-icon" />
+      <NButton class="action-btn attach-btn" quaternary circle @click="triggerFileSelect" :disabled="loading" title="附加数据流">
+        <PaperclipIcon class="action-icon" />
       </NButton>
 
       <div class="prompt-col">
-        <span class="prompt-label">root@DeepSOC:~$</span>
+        <span class="prompt-label">root@DeepSOC<span class="prompt-cursor">:~$</span></span>
       </div>
 
-      <NInput ref="textareaRef" v-model:value="draftMessage" class="terminal-textarea" type="textarea"
-        :autosize="{ minRows: 1, maxRows: 8 }" placeholder="输入诊断命令、日志片段或排障请求..."
-        @keydown.enter.exact.prevent="sendMessage" @focus="setFocusState(true)" @blur="setFocusState(false)" />
+      <NInput 
+        ref="textareaRef" 
+        v-model:value="draftMessage" 
+        class="terminal-textarea" 
+        type="textarea"
+        :autosize="{ minRows: 1, maxRows: 8 }" 
+        placeholder="       输入诊断命令、日志片段或排障请求..."
+        @keydown.enter.exact.prevent="sendMessage" 
+        @focus="setFocusState(true)" 
+        @blur="setFocusState(false)" 
+      />
 
       <NButton
-        class="stage-btn stage-btn--send"
-        :class="{ 'send-btn--stop': streaming }"
+        class="action-btn send-btn"
+        :class="{ 'send-btn--stop': streaming, 'send-btn--active': !sendButtonDisabled }"
         quaternary
         circle
         @click="onSendOrStopClick"
-        :disabled="sendButtonDisabled"
-        :aria-label="streaming ? '停止回答' : '发送消息'"
+        :disabled="sendButtonDisabled && !streaming"
+        :aria-label="streaming ? '中断信号' : '发送指令'"
       >
-        <span v-if="streaming" class="stop-icon" aria-hidden="true">
-          <span class="stop-icon__bar" />
-          <span class="stop-icon__bar" />
+        <span v-if="streaming" class="stop-indicator" aria-hidden="true">
+          <span class="stop-bar" />
+          <span class="stop-bar" />
         </span>
-        <SendIcon v-else class="stage-icon" />
+        <SendIcon v-else class="action-icon send-icon" />
       </NButton>
     </div>
 
-    <div class="wave-lane" aria-hidden="true" :class="{ 'is-active': isFocused || draftMessage.length > 0 }">
-      <span v-for="index in 32" :key="`wave-${index}`" class="wave-bar"
-        :style="`--delay: ${index * 20}ms; --hue: ${185 + (index % 7)}`"></span>
+    <div class="energy-line" aria-hidden="true">
+      <div class="energy-glow" :class="{ 'energy-glow--active': isFocused || draftMessage.length > 0 }"></div>
     </div>
   </NCard>
 </template>
@@ -124,22 +139,13 @@ import {
 } from 'naive-ui'
 import { useAppStore } from '../stores/appStore'
 import { useChatStore } from '../stores/chatStore'
-import { BoltIcon, DatabaseIcon, PaperclipIcon, SendIcon, WorldIcon } from 'vue-tabler-icons'
+import { BoltIcon, DatabaseIcon, PaperclipIcon, SendIcon, WorldIcon, XIcon } from 'vue-tabler-icons'
 import { uploadFile as uploadFileApi } from '../api'
 
 const props = defineProps({
-  loading: {
-    type: Boolean,
-    default: false,
-  },
-  streaming: {
-    type: Boolean,
-    default: false,
-  },
-  currentSession: {
-    type: String,
-    default: '',
-  },
+  loading: { type: Boolean, default: false },
+  streaming: { type: Boolean, default: false },
+  currentSession: { type: String, default: '' },
 })
 
 const emit = defineEmits(['send', 'stop'])
@@ -167,9 +173,7 @@ const normalizedProvider = computed(() => (appStore.llmProvider || 'siliconflow'
 
 const providerModelOptions = computed(() => {
   const options = PROVIDER_MODEL_CANDIDATES[normalizedProvider.value]
-  if (Array.isArray(options) && options.length > 0) {
-    return options
-  }
+  if (Array.isArray(options) && options.length > 0) return options
   return [appStore.llmModel || 'DeepSeek-V3.2']
 })
 
@@ -177,9 +181,7 @@ const modelSelectOptions = computed(() => providerModelOptions.value.map((model)
 
 const resolvePreferredModel = () => {
   const preferred = (appStore.llmModel || '').trim()
-  if (preferred && providerModelOptions.value.includes(preferred)) {
-    return preferred
-  }
+  if (preferred && providerModelOptions.value.includes(preferred)) return preferred
   return providerModelOptions.value[0] || 'DeepSeek-V3.2'
 }
 
@@ -219,12 +221,8 @@ const resolvedSessionId = computed(() => {
 })
 
 const draftMessage = computed({
-  get: () => {
-    return chatStore.draftInputs?.[resolvedSessionId.value] || ''
-  },
-  set: (value) => {
-    chatStore.setSessionDraft(resolvedSessionId.value, value || '')
-  },
+  get: () => chatStore.draftInputs?.[resolvedSessionId.value] || '',
+  set: (value) => chatStore.setSessionDraft(resolvedSessionId.value, value || ''),
 })
 
 const setFocusState = (value) => {
@@ -243,11 +241,7 @@ const buildAgentConfigs = () => {
 
   const buildConfig = (modelValue) => {
     const model = (modelValue || fallbackModel).trim() || fallbackModel
-    return {
-      provider,
-      model,
-      provider_api_key: providerApiKey || undefined,
-    }
+    return { provider, model, provider_api_key: providerApiKey || undefined }
   }
 
   return {
@@ -257,7 +251,7 @@ const buildAgentConfigs = () => {
   }
 }
 
-const sendButtonDisabled = computed(() => !props.streaming && !draftMessage.value.trim())
+const sendButtonDisabled = computed(() => !props.streaming && !draftMessage.value.trim() && !attachmentText.value)
 
 const onSendOrStopClick = () => {
   if (props.streaming) {
@@ -269,7 +263,7 @@ const onSendOrStopClick = () => {
 
 const sendMessage = () => {
   const content = draftMessage.value.trim()
-  if (!content || props.streaming) return
+  if ((!content && !attachmentText.value) || props.streaming) return
 
   emit('send', content, {
     attachmentText: attachmentText.value,
@@ -314,13 +308,14 @@ const onFileChange = (event) => {
   const file = files[0]
   uploadFileApi(file)
     .then((res) => {
-      attachmentText.value = res.text || ''
-      attachmentName.value = file.name || '附件文本'
+      if (res && res.text) {
+        attachmentText.value = res.text
+        attachmentName.value = file.name || 'DATA_STREAM_ATTACHED'
+      } else {
+        setContent(`[SYS_ERR] 数据流解析异常或为空`)
+      }
     })
-    .catch((err) => {
-      setContent(`【文件读取失败】${err?.message || ''}`)
-    })
-    .finally(() => {
+    .then(() => {
       event.target.value = ''
     })
 }
@@ -330,91 +325,79 @@ const removeAttachment = () => {
   attachmentName.value = ''
 }
 
-defineExpose({
-  setContent,
-  clearInput,
-  getContent,
-  submit: sendMessage,
-  focus,
-})
+defineExpose({ setContent, clearInput, getContent, submit: sendMessage, focus })
 </script>
 
 <style scoped>
+/* ==========================================================================
+   架构级视觉重构：亚克力质感与微交互
+   ========================================================================== */
+
 .terminal-input-shell {
   position: relative;
-  border: 1px solid var(--border-dim);
-  background: rgba(2, 8, 22, 0.75);
-  padding: 0.55rem 1rem 0.72rem;
-  clip-path: polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px);
-  box-shadow: inset 0 0 22px rgba(0, 229, 255, 0.05);
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  background: rgba(4, 8, 16, 0.65);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+  padding: 0.6rem 1.2rem 0.8rem;
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: visible;
+}
+
+.terminal-input-shell::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, rgba(0, 229, 255, 0.2), rgba(255, 255, 255, 0.02) 50%, rgba(0, 229, 255, 0.05));
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  opacity: 0.5;
+  transition: opacity 0.4s ease;
+}
+
+.terminal-input-shell--focused::before,
+.terminal-input-shell--has-text::before {
+  opacity: 1;
+  background: linear-gradient(135deg, rgba(0, 229, 255, 0.5), rgba(255, 255, 255, 0.05) 50%, rgba(0, 229, 255, 0.15));
 }
 
 .terminal-input-shell :deep(.n-card__content) {
   padding: 0;
 }
 
-.terminal-input-shell--focused {
-  border-color: rgba(0, 229, 255, 0.55);
-  box-shadow: inset 0 0 26px rgba(0, 229, 255, 0.09), 0 0 12px rgba(0, 229, 255, 0.12);
+/* --- 高级平滑展开动画 (CSS Grid Hack) --- */
+.expandable-wrapper {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.6s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.42s ease;
+  opacity: 0;
 }
 
-.edit-hint-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  margin: 0.35rem 0 0.45rem;
-  padding: 0.35rem 0.5rem;
-  border: 1px solid rgba(0, 229, 255, 0.28);
-  background: rgba(0, 229, 255, 0.06);
+.expandable-inner {
+  overflow: hidden;
 }
 
-.edit-hint-text {
-  font-family: var(--font-ui);
-  font-size: 0.62rem;
-  letter-spacing: 0.06em;
-  color: #8fd0e8;
+/* 仅在悬停时展开控制栏与多智能体面板 */
+.terminal-input-shell:hover .toggle-wrapper,
+.terminal-input-shell:hover .multi-agent-wrapper.is-active {
+  grid-template-rows: 1fr;
+  opacity: 1;
 }
 
-.edit-hint-cancel {
-  flex-shrink: 0;
-}
-
+/* --- 顶部控制栏重构 --- */
 .terminal-controls {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.65rem;
-  margin-bottom: 0.1rem;
-  flex-wrap: wrap;
+  padding-bottom: 0.8rem;
 }
 
 .toggle-form {
-  display: inline-flex;
-  gap: 1rem;
-  flex-wrap: wrap;
-
-  /* [新增] 默认收纳隐藏 */
-  max-height: 0;
-  opacity: 0;
-  overflow: hidden;
-  transform: translateY(5px);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  /* 平滑过渡动画 */
-}
-
-/* [新增] 当鼠标悬浮输入框，或输入框获得焦点时展开 */
-.terminal-input-shell:hover .toggle-form,
-.terminal-input-shell--focused .toggle-form {
-  max-height: 40px;
-  /* 足够容纳开关的高度 */
-  opacity: 1;
-  transform: translateY(-15px);
-}
-
-.toggle-form :deep(.n-form-item) {
-  margin-bottom: 0;
+  display: flex;
+  gap: 0.8rem;
 }
 
 .toggle-item {
@@ -422,382 +405,291 @@ defineExpose({
   align-items: center;
 }
 
+.toggle-item :deep(.n-form-item-blank) {
+  display: flex;
+  align-items: center;
+}
+
 .toggle-core {
   display: inline-flex;
   align-items: center;
-  margin-left: 0.75rem;
-  gap: 0.28rem;
-  padding: 0.22rem 0.5rem;
-  border: 1px solid var(--border-dim);
+  margin-left: 0.5rem;
+  gap: 0.3rem;
+  padding: 0.2rem 0.6rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 4px;
   font-family: var(--font-ui);
-  font-size: 0.62rem;
-  letter-spacing: 0.08em;
+  font-size: 0.65rem;
+  letter-spacing: 0.06em;
   color: var(--text-muted);
+  transition: all 0.3s ease;
 }
 
-.toggle-item :deep(.n-switch) {
-  --n-rail-color: rgba(0, 229, 255, 0.12);
-  --n-rail-color-active: rgba(0, 229, 255, 0.36);
-}
-
-.toggle-item :deep(.n-switch.n-switch--active)+.toggle-core {
-  border-color: rgba(0, 229, 255, 0.55);
-  color: var(--neon-cyan);
+.toggle-item :deep(.n-switch.n-switch--active) + .toggle-core {
+  border-color: rgba(0, 229, 255, 0.3);
+  color: #fff;
   background: rgba(0, 229, 255, 0.1);
+  box-shadow: 0 0 12px rgba(0, 229, 255, 0.1);
 }
 
 .toggle-icon {
-  width: 0.78rem;
-  height: 0.78rem;
+  width: 0.85rem;
+  height: 0.85rem;
+}
+
+/* --- 多智能体面板质感提升 --- */
+.multi-agent-config {
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-radius: 6px;
+  padding: 0.8rem 1rem; 
+  margin-bottom: 0.8rem;
+}
+
+.multi-agent-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.8rem;
+}
+
+.multi-agent-title {
+  font-family: var(--font-ui);
+  font-size: 0.65rem;
+  letter-spacing: 0.15em;
+  color: var(--neon-cyan);
 }
 
 .multi-agent-provider {
   font-family: var(--font-ui);
-  font-size: 0.58rem;
-  color: #7ba7bc;
+  font-size: 0.6rem;
+  color: var(--text-secondary);
   letter-spacing: 0.08em;
-  margin-bottom: 0.45rem;
 }
 
-.attachment-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  border: 1px solid rgba(123, 44, 191, 0.45);
-  background: rgba(123, 44, 191, 0.12);
-  color: #cf9bff;
-  padding: 0.3rem 0.55rem;
-  font-family: var(--font-ui);
-  font-size: 0.75rem;
-}
-
-.attachment-name {
-  max-width: 200px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.chip-close {
-  min-width: 0;
-  height: auto;
-  font-family: var(--font-ui);
-  font-size: 0.75rem;
-  padding: 0;
-  color: inherit;
-}
-
-.multi-agent-config {
-  background: linear-gradient(90deg, rgba(0, 229, 255, 0.08) 0%, rgba(0, 229, 255, 0.03) 55%, rgba(0, 0, 0, 0.15) 100%);
-  max-height: 0;
-  opacity: 0;
-  overflow: hidden;
-  margin: 0;
-  padding: 0 0.55rem;
-  border: 0 solid var(--border-dim);
-  transform: translateY(5px);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.terminal-input-shell:hover .multi-agent-config,
-.terminal-input-shell--focused .multi-agent-config {
-  max-height: 250px;
-  opacity: 1;
-  margin: 0.15rem 0 0.65rem;
-  padding: 0.48rem 0.55rem 0.55rem;
-  border-width: 1px;
-  transform: translateY(-6px);
-}
-
-.multi-agent-config :deep(.n-form-item-label__text) {
-  font-family: var(--font-ui);
-  font-size: 0.56rem;
-  letter-spacing: 0.08em;
+.agent-field :deep(.n-form-item-label__text) {
+  font-size: 0.6rem;
+  letter-spacing: 0.05em;
   color: var(--text-secondary);
 }
 
-.multi-agent-config :deep(.n-base-selection) {
-  background: rgba(2, 8, 22, 0.85);
-  border: 1px solid var(--border-dim);
+.agent-field :deep(.n-base-selection) {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 4px;
+  transition: all 0.2s ease;
 }
 
-.multi-agent-config__title {
+.agent-field :deep(.n-base-selection:hover) {
+  border-color: rgba(0, 229, 255, 0.4);
+}
+
+/* --- 附件栏 & 编辑提示栏 --- */
+.attachment-bar, .edit-hint-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.8rem;
+  border-radius: 4px;
+  margin-bottom: 0.6rem;
   font-family: var(--font-ui);
-  font-size: 0.58rem;
-  letter-spacing: 0.14em;
-  color: var(--neon-cyan);
-  margin-bottom: 0.45rem;
-  text-shadow: var(--neon-cyan-glow);
+  font-size: 0.75rem;
 }
 
+.attachment-bar {
+  background: rgba(123, 44, 191, 0.1);
+  border: 1px solid rgba(123, 44, 191, 0.3);
+  color: #e2c2ff;
+}
+
+.edit-hint-bar {
+  background: rgba(0, 229, 255, 0.05);
+  border: 1px solid rgba(0, 229, 255, 0.2);
+  color: #a1ebff;
+  justify-content: space-between;
+}
+
+.attachment-icon { width: 1rem; height: 1rem; }
+.attachment-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.close-icon-svg { width: 1rem; height: 1rem; opacity: 0.7; transition: opacity 0.2s; }
+.close-icon-svg:hover { opacity: 1; }
+
+/* --- 核心输入区 --- */
 .input-stage {
   display: grid;
   grid-template-columns: auto auto 1fr auto;
   align-items: flex-end;
-  gap: 0.72rem;
-  padding: 0 0.22rem;
+  gap: 0.8rem;
   position: relative;
+  z-index: 2;
 }
 
 .prompt-col {
-  align-self: start;
-  padding-top: 0.26rem;
+  padding-bottom: 0.45rem;
+  user-select: none;
 }
 
 .prompt-label {
-  font-family: var(--font-ui);
+  font-family: var(--font-mono);
   font-size: 0.8rem;
+  color: rgba(123, 167, 188, 0.7); 
+  letter-spacing: 0.02em;
+}
+
+.prompt-cursor {
   color: var(--neon-cyan);
-  letter-spacing: 0.04em;
 }
 
 .terminal-textarea {
-  min-height: 2rem;
-  margin-left: 0.4rem;
-  margin-right: 0.9rem;
+  margin: 0;
 }
 
 .terminal-textarea :deep(.n-input-wrapper) {
   background: transparent;
   box-shadow: none;
   border: none;
-  padding-left: 0.6rem;
-  padding-right: 0.6rem;
+  padding: 0;
 }
 
 .terminal-textarea :deep(.n-input__textarea-el) {
   border: none;
   background: transparent;
-  color: var(--text-primary);
+  color: #F8FAFC;
   font-family: var(--font-ui);
-  font-size: 0.9rem;
-  line-height: 1.55;
+  font-size: 0.95rem;
+  line-height: 1.6;
   resize: none;
-  clip-path: none;
-  padding: 0.38rem 0.15rem;
+  padding: 0.4rem 0 0.3rem 1.2rem; 
+  caret-color: var(--neon-cyan);
 }
 
 .terminal-textarea :deep(.n-input__textarea-el::placeholder) {
-  color: var(--text-muted);
+  color: rgba(255, 255, 255, 0.15);
+  font-weight: 300;
 }
 
-.stage-btn {
-  width: 2.15rem;
-  height: 2.15rem;
+.action-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
   padding: 0;
-  border: 1px solid rgba(0, 229, 255, 0.24);
-  --n-border: 1px solid rgba(0, 229, 255, 0.24);
-  --n-color: linear-gradient(180deg, rgba(18, 33, 60, 0.98) 0%, rgba(6, 14, 30, 0.98) 100%);
-  --n-color-hover: linear-gradient(180deg, rgba(24, 46, 82, 0.98) 0%, rgba(8, 18, 36, 0.98) 100%);
-  --n-color-pressed: linear-gradient(180deg, rgba(12, 24, 48, 0.98) 0%, rgba(4, 10, 22, 0.98) 100%);
-  --n-text-color: rgba(140, 205, 226, 0.9);
-  --n-text-color-hover: var(--neon-cyan);
-  --n-text-color-pressed: #e7feff;
-  position: relative;
-  overflow: hidden;
-  backdrop-filter: blur(10px);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.03),
-    0 0 0 1px rgba(0, 229, 255, 0.08),
-    0 10px 22px rgba(0, 0, 0, 0.28);
-  transition:
-    transform 0.18s var(--transition-bezier),
-    box-shadow 0.18s var(--transition-bezier),
-    border-color 0.18s var(--transition-bezier),
-    filter 0.18s var(--transition-bezier);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-secondary);
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  backdrop-filter: blur(8px);
 }
 
-.stage-btn--send {
-  --n-border: 1px solid rgba(0, 229, 255, 0.4);
-  --n-color: linear-gradient(180deg, rgba(15, 49, 72, 0.98) 0%, rgba(5, 24, 40, 0.98) 100%);
-  --n-color-hover: linear-gradient(180deg, rgba(21, 65, 92, 0.98) 0%, rgba(7, 31, 52, 0.98) 100%);
-  --n-color-pressed: linear-gradient(180deg, rgba(11, 35, 54, 0.98) 0%, rgba(3, 16, 28, 0.98) 100%);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    inset 0 0 0 1px rgba(0, 229, 255, 0.05),
-    0 0 0 1px rgba(0, 229, 255, 0.12),
-    0 12px 24px rgba(0, 0, 0, 0.3);
+.action-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.15);
+  color: #fff;
+  transform: translateY(-2px);
+}
+
+.action-icon {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+/* 与发送按钮同步交互视觉的附件按钮 */
+.attach-btn:hover:not(:disabled) {
+  background: transparent !important; 
+  border-color: rgba(0, 229, 255, 0.4);
+  border-width: 1.5px;
+  box-shadow: none;
+  color: #fff;
+  transform: translateY(-2px);
+}
+
+.send-btn--active {
+  background: transparent !important; 
+  border-color: rgba(0, 229, 255, 0.3);
+  border-width: 1.5px;
+  box-shadow: none;
+  color: var(--neon-cyan);
+  box-shadow: 0 4px 12px rgba(0, 229, 255, 0.1);
+}
+
+.send-btn--active:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(0, 229, 255, 0.25), rgba(0, 136, 255, 0.1));
+  border-color: var(--neon-cyan);
+  box-shadow: 0 6px 20px rgba(0, 229, 255, 0.2), inset 0 0 8px rgba(255, 255, 255, 0.1);
+  color: #fff;
 }
 
 .send-btn--stop {
-  position: relative;
-  --n-border: 1px solid rgba(255, 110, 145, 0.55);
-  --n-color: linear-gradient(180deg, rgba(68, 15, 36, 0.98) 0%, rgba(29, 10, 22, 0.98) 100%);
-  --n-color-hover: linear-gradient(180deg, rgba(92, 22, 47, 0.98) 0%, rgba(39, 12, 26, 0.98) 100%);
-  --n-color-pressed: linear-gradient(180deg, rgba(46, 12, 26, 0.98) 0%, rgba(20, 8, 16, 0.98) 100%);
-  --n-text-color: #ffd6e0;
-  --n-text-color-hover: #fff4f7;
-  --n-text-color-pressed: #ffffff;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.03),
-    0 0 0 1px rgba(255, 110, 145, 0.2),
-    0 0 18px rgba(255, 110, 145, 0.26),
-    0 12px 24px rgba(0, 0, 0, 0.32);
-  transform: translateY(-1px);
+  background: rgba(255, 0, 85, 0.1);
+  border-color: rgba(255, 0, 85, 0.3);
+  color: #ff4d6d;
 }
 
-.send-btn--stop::after {
-  content: '';
-  position: absolute;
-  inset: -6px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 107, 147, 0.38);
-  opacity: 0;
-  pointer-events: none;
-  animation: stopPulse 1.15s ease-out infinite;
+.send-btn--stop:hover:not(:disabled) {
+  background: rgba(255, 0, 85, 0.2);
+  border-color: rgba(255, 0, 85, 0.6);
+  color: #fff;
+  box-shadow: 0 0 15px rgba(255, 0, 85, 0.3);
 }
 
-.stop-icon {
-  display: inline-flex;
+.stop-indicator {
+  display: flex;
+  gap: 3px;
   align-items: center;
   justify-content: center;
-  gap: 2px;
-  width: 0.7rem;
-  height: 0.7rem;
-  filter: drop-shadow(0 0 6px rgba(255, 107, 147, 0.56));
 }
 
-.stop-icon__bar {
-  display: block;
-  width: 0.2rem;
-  height: 0.62rem;
+.stop-bar {
+  width: 4px;
+  height: 12px;
+  background-color: currentColor;
   border-radius: 1px;
-  background: currentColor;
 }
 
-.stage-icon {
-  width: 1rem;
-  height: 1rem;
-}
-
-.stage-btn:hover:not(:disabled),
-.stage-btn:focus-visible {
-  transform: translateY(-1px);
-  filter: brightness(1.05) saturate(1.08);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.1),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.04),
-    0 0 0 1px rgba(0, 229, 255, 0.2),
-    0 0 18px rgba(0, 229, 255, 0.22),
-    0 12px 24px rgba(0, 0, 0, 0.34);
-}
-
-.stage-btn:active:not(:disabled) {
-  transform: translateY(0) scale(0.98);
-}
-
-.stage-btn:focus-visible {
-  outline: none;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.12),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.04),
-    0 0 0 1px rgba(0, 229, 255, 0.3),
-    0 0 0 4px rgba(0, 229, 255, 0.08),
-    0 0 20px rgba(0, 229, 255, 0.22),
-    0 12px 24px rgba(0, 0, 0, 0.34);
-}
-
-.send-btn--stop:hover:not(:disabled),
-.send-btn--stop:focus-visible {
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.12),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.04),
-    0 0 0 1px rgba(255, 110, 145, 0.24),
-    0 0 20px rgba(255, 110, 145, 0.28),
-    0 12px 24px rgba(0, 0, 0, 0.36);
-}
-
-.send-btn--stop:focus-visible {
-  outline: none;
-}
-
-.wave-lane {
-  margin-top: 0.6rem;
-  height: 24px;
-  display: flex;
-  align-items: flex-end;
-  gap: 2px;
+/* --- 极简能量条 --- */
+.energy-line {
+  position: absolute;
+  bottom: 0;
+  left: 1.2rem;
+  right: 1.2rem;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.04);
   overflow: hidden;
-  border-top: 1px solid rgba(0, 229, 255, 0.12);
-  padding-top: 0.3rem;
 }
 
-.wave-bar {
-  width: 3px;
-  min-height: 4px;
-  border-radius: 1px;
-  transform-origin: bottom;
-  background: hsla(var(--hue), 100%, 62%, 0.3);
-  box-shadow: 0 0 10px hsla(var(--hue), 100%, 62%, 0.5);
-  animation: waveIdle 1.5s ease-in-out infinite;
-  animation-delay: var(--delay);
-  will-change: transform;
+.energy-glow {
+  width: 30%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, var(--neon-cyan), transparent);
+  opacity: 0;
+  transform: translateX(-100%);
+  transition: opacity 0.4s ease;
 }
 
-.is-active .wave-bar {
-  animation: waveActive 1.5s ease-in-out infinite;
-  animation-delay: var(--delay);
-  background: hsla(var(--hue), 100%, 62%, 0.8);
+.energy-glow--active {
+  opacity: 0.8;
+  animation: energy-scan 2.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
 
-@keyframes waveIdle {
-
-  0%,
-  100% {
-    transform: scaleY(0.85);
-  }
-
-  50% {
-    transform: scaleY(1.15);
-  }
-}
-
-@keyframes waveActive {
-
-  0%,
-  100% {
-    transform: scaleY(1);
-  }
-
-  50% {
-    transform: scaleY(4.5);
-  }
-}
-
-@keyframes stopPulse {
-  0% {
-    transform: scale(0.88);
-    opacity: 0.7;
-  }
-
-  100% {
-    transform: scale(1.28);
-    opacity: 0;
-  }
+@keyframes energy-scan {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(300%); }
 }
 
 @media (max-width: 900px) {
   .input-stage {
     grid-template-columns: auto 1fr auto;
-    gap: 0.55rem;
-    padding: 0 0.1rem;
+    gap: 0.6rem;
   }
-
   .prompt-col {
     grid-column: 1 / -1;
-    padding-top: 0;
+    padding-bottom: 0;
   }
-
   .terminal-textarea {
     grid-column: 1 / 3;
-    margin-left: 0.12rem;
-    margin-right: 0.5rem;
-  }
-
-  .attachment-name {
-    max-width: 120px;
   }
 }
 </style>
